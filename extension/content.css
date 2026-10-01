@@ -1,0 +1,26 @@
+/* Style only the added paragraph, never the host page's layout containers. */
+[data-clearling="translation"] {
+  display: block !important;
+  box-sizing: border-box !important;
+  margin: .35em 0 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  font-family: inherit;
+  font-weight: inherit;
+  font-style: normal !important;
+  letter-spacing: normal;
+  white-space: pre-wrap !important;
+  overflow-wrap: break-word !important;
+  word-break: normal !important;
+  text-align: start;
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+[data-cl-source] { display: none !important; }
+[data-clearling="translation"][hidden] { display: none !important; }
+[data-clearling="translation"][data-mode="translated"] { margin-top: 0 !important; }
+td[data-clearling="translation"],th[data-clearling="translation"] { display: table-cell !important; }
+li[data-clearling="translation"] { display: list-item !important; }
+[data-clearling="translation"] button { font: inherit; font-size: .8em; color: inherit; background: transparent; border: 0; text-decoration: underline; cursor: pointer; margin-inline-start: .7em; padding: 0; }
+[data-clearling="translation"][data-phase="pending"] { opacity: .65; }

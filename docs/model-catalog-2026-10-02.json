@@ -1,0 +1,425 @@
+{
+  "asOf": "2026-10-02",
+  "source": "https://model-access.cindy.app/api/model-access/models?schemaVersion=5",
+  "publicMetadataSource": "https://model-access.cindy.app/api/model-catalog/catalog?registrySchemaVersion=5&registryMedia=1",
+  "publicMetadataUpdatedAt": "2026-09-29T19:00:00.000Z",
+  "accountTier": "not_applicable",
+  "priceKind": "live_public_gateway_catalog_not_user_tenant_invoice",
+  "priceUnit": "per_million_tokens",
+  "threshold": {
+    "currency": "USD",
+    "effectiveInputMax": 0.75,
+    "effectiveOutputMax": 4.5
+  },
+  "thinkingCapability": {
+    "kind": "catalogued_effort",
+    "source": "https://model-access.cindy.app/api/model-access/models?schemaVersion=5",
+    "offVerified": false,
+    "chatCompletionsVerified": false
+  },
+  "defaultModelMustRemain": "xiaomi/mimo-v2.6-flash",
+  "models": [
+    {
+      "id": "z-ai/glm-5.3-flash",
+      "name": "GLM 5.3 Flash",
+      "family": "GLM",
+      "inputPerMillion": 0.15,
+      "outputPerMillion": 0.5,
+      "currency": "USD",
+      "discount": 0.2,
+      "effectiveInputPerMillion": 0.03,
+      "effectiveOutputPerMillion": 0.1,
+      "efforts": [
+        "low",
+        "medium",
+        "high",
+        "max"
+      ],
+      "defaultEffort": "max",
+      "thinkingCapabilitySource": "https://model-access.cindy.app/api/model-access/models?schemaVersion=5",
+      "availability": "available",
+      "tested": false
+    },
+    {
+      "id": "z-ai/glm-5.3-flashx",
+      "name": "GLM 5.3 FlashX",
+      "family": "GLM",
+      "inputPerMillion": 0.37,
+      "outputPerMillion": 1.25,
+      "currency": "USD",
+      "discount": 0.15,
+      "effectiveInputPerMillion": 0.0555,
+      "effectiveOutputPerMillion": 0.1875,
+      "efforts": [
+        "low",
+        "medium",
+        "high",
+        "max"
+      ],
+      "defaultEffort": "max",
+      "thinkingCapabilitySource": "https://model-access.cindy.app/api/model-access/models?schemaVersion=5",
+      "availability": "available",
+      "tested": false
+    },
+    {
+      "id": "openai/gpt-6-luna",
+      "name": "GPT-6 Luna",
+      "family": "GPT",
+      "inputPerMillion": 0.1,
+      "outputPerMillion": 0.5,
+      "currency": "USD",
+      "discount": 1,
+      "effectiveInputPerMillion": 0.1,
+      "effectiveOutputPerMillion": 0.5,
+      "efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "defaultEffort": "medium",
+      "aliases": [
+        "gpt-6-luna"
+      ],
+      "thinkingCapabilitySource": "https://model-access.cindy.app/api/model-access/models?schemaVersion=5",
+      "availability": "available",
+      "tested": false
+    },
+    {
+      "id": "qwen/qwen3.8-omni-flash",
+      "name": "Qwen3.8 Omni Flash",
+      "family": "Qwen",
+      "inputPerMillion": 0.113,
+      "outputPerMillion": 0.382,
+      "currency": "USD",
+      "discount": 1,
+      "effectiveInputPerMillion": 0.113,
+      "effectiveOutputPerMillion": 0.382,
+      "efforts": [
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "defaultEffort": "xhigh",
+      "thinkingCapabilitySource": "https://model-access.cindy.app/api/model-access/models?schemaVersion=5",
+      "availability": "available",
+      "tested": false
+    },
+    {
+      "id": "qwen/qwen3.8-27b",
+      "name": "Qwen3.8 27B",
+      "family": "Qwen",
+      "inputPerMillion": 0.425,
+      "outputPerMillion": 2.55,
+      "currency": "USD",
+      "discount": 0.3,
+      "effectiveInputPerMillion": 0.1275,
+      "effectiveOutputPerMillion": 0.765,
+      "efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh"
+      ],
+      "defaultEffort": "xhigh",
+      "thinkingCapabilitySource": "https://model-access.cindy.app/api/model-access/models?schemaVersion=5",
+      "availability": "available",
+      "tested": false
+    },
+    {
+      "id": "tencent/hy3",
+      "name": "Hy3",
+      "family": "Hunyuan",
+      "inputPerMillion": 0.132,
+      "outputPerMillion": 0.528,
+      "currency": "USD",
+      "discount": 1,
+      "effectiveInputPerMillion": 0.132,
+      "effectiveOutputPerMillion": 0.528,
+      "efforts": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "defaultEffort": "high",
+      "thinkingCapabilitySource": "https://model-access.cindy.app/api/model-access/models?schemaVersion=5",
+      "availability": "available",
+      "tested": false
+    },
+    {
+      "id": "qwen/qwen3.8-flash",
+      "name": "Qwen3.8 Flash",
+      "family": "Qwen",
+      "inputPerMillion": 0.16,
+      "outputPerMillion": 0.47,
+      "currency": "USD",
+      "discount": 1,
+      "effectiveInputPerMillion": 0.16,
+      "effectiveOutputPerMillion": 0.47,
+      "efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh"
+      ],
+      "defaultEffort": "xhigh",
+      "thinkingCapabilitySource": "https://model-access.cindy.app/api/model-access/models?schemaVersion=5",
+      "availability": "available",
+      "tested": false
+    },
+    {
+      "id": "openai/gpt-5.6-luna",
+      "name": "GPT-5.6 Luna",
+      "family": "GPT",
+      "inputPerMillion": 0.2,
+      "outputPerMillion": 1.2,
+      "currency": "USD",
+      "discount": 1,
+      "effectiveInputPerMillion": 0.2,
+      "effectiveOutputPerMillion": 1.2,
+      "efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "defaultEffort": "medium",
+      "aliases": [
+        "gpt-5.6-luna",
+        "xd/gpt-5.6-luna"
+      ],
+      "thinkingCapabilitySource": "https://model-access.cindy.app/api/model-access/models?schemaVersion=5",
+      "availability": "available",
+      "tested": false
+    },
+    {
+      "id": "z-ai/glm-5.3",
+      "name": "GLM 5.3",
+      "family": "GLM",
+      "inputPerMillion": 1.4,
+      "outputPerMillion": 4.4,
+      "currency": "USD",
+      "discount": 0.2,
+      "effectiveInputPerMillion": 0.28,
+      "effectiveOutputPerMillion": 0.88,
+      "efforts": [
+        "low",
+        "medium",
+        "high",
+        "max"
+      ],
+      "defaultEffort": "max",
+      "thinkingCapabilitySource": "https://model-access.cindy.app/api/model-access/models?schemaVersion=5",
+      "availability": "available",
+      "tested": false
+    },
+    {
+      "id": "qwen/qwen3.8-max",
+      "name": "Qwen3.8 Max",
+      "family": "Qwen",
+      "inputPerMillion": 2,
+      "outputPerMillion": 6,
+      "currency": "USD",
+      "discount": 0.15,
+      "effectiveInputPerMillion": 0.3,
+      "effectiveOutputPerMillion": 0.9,
+      "efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh"
+      ],
+      "defaultEffort": "xhigh",
+      "thinkingCapabilitySource": "https://model-access.cindy.app/api/model-access/models?schemaVersion=5",
+      "availability": "available",
+      "tested": false
+    },
+    {
+      "id": "deepseek/deepseek-flash",
+      "name": "DeepSeek Flash",
+      "family": "DeepSeek",
+      "inputPerMillion": 0.3,
+      "outputPerMillion": 1.2,
+      "currency": "USD",
+      "discount": 1,
+      "effectiveInputPerMillion": 0.3,
+      "effectiveOutputPerMillion": 1.2,
+      "efforts": [
+        "medium",
+        "high",
+        "max"
+      ],
+      "defaultEffort": "high",
+      "thinkingCapabilitySource": "https://model-access.cindy.app/api/model-access/models?schemaVersion=5",
+      "availability": "available",
+      "tested": false
+    },
+    {
+      "id": "deepseek/deepseek-v4-flash",
+      "name": "DeepSeek V4 Flash",
+      "family": "DeepSeek",
+      "inputPerMillion": 0.3,
+      "outputPerMillion": 1.2,
+      "currency": "USD",
+      "discount": 1,
+      "effectiveInputPerMillion": 0.3,
+      "effectiveOutputPerMillion": 1.2,
+      "efforts": [
+        "medium",
+        "high",
+        "max"
+      ],
+      "defaultEffort": "high",
+      "thinkingCapabilitySource": "https://model-access.cindy.app/api/model-access/models?schemaVersion=5",
+      "availability": "available",
+      "tested": false
+    },
+    {
+      "id": "deepseek/deepseek-v4-flash-vision-exp",
+      "name": "DeepSeek V4 Flash Vision Exp",
+      "family": "DeepSeek",
+      "inputPerMillion": 0.3,
+      "outputPerMillion": 1.2,
+      "currency": "USD",
+      "discount": 1,
+      "effectiveInputPerMillion": 0.3,
+      "effectiveOutputPerMillion": 1.2,
+      "efforts": [
+        "medium",
+        "high",
+        "max"
+      ],
+      "defaultEffort": "high",
+      "thinkingCapabilitySource": "https://model-access.cindy.app/api/model-access/models?schemaVersion=5",
+      "availability": "available",
+      "tested": false
+    },
+    {
+      "id": "z-ai/glm-5.2",
+      "name": "GLM 5.2",
+      "family": "GLM",
+      "inputPerMillion": 1.4,
+      "outputPerMillion": 4.4,
+      "currency": "USD",
+      "discount": 0.3,
+      "effectiveInputPerMillion": 0.42,
+      "effectiveOutputPerMillion": 1.32,
+      "efforts": [
+        "minimal",
+        "medium",
+        "high",
+        "max"
+      ],
+      "defaultEffort": "max",
+      "thinkingCapabilitySource": "https://model-access.cindy.app/api/model-access/models?schemaVersion=5",
+      "availability": "available",
+      "tested": false
+    },
+    {
+      "id": "google/gemini-3.7-flash",
+      "name": "Gemini 3.7 Flash",
+      "family": "Gemini",
+      "inputPerMillion": 0.75,
+      "outputPerMillion": 3.75,
+      "currency": "USD",
+      "discount": 1,
+      "effectiveInputPerMillion": 0.75,
+      "effectiveOutputPerMillion": 3.75,
+      "efforts": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "defaultEffort": "medium",
+      "thinkingCapabilitySource": "https://model-access.cindy.app/api/model-access/models?schemaVersion=5",
+      "availability": "available",
+      "tested": false
+    },
+    {
+      "id": "google/gemini-3.8-flash",
+      "name": "Gemini 3.8 Flash",
+      "family": "Gemini",
+      "inputPerMillion": 0.75,
+      "outputPerMillion": 3.75,
+      "currency": "USD",
+      "discount": 1,
+      "effectiveInputPerMillion": 0.75,
+      "effectiveOutputPerMillion": 3.75,
+      "efforts": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "defaultEffort": "medium",
+      "thinkingCapabilitySource": "https://model-access.cindy.app/api/model-access/models?schemaVersion=5",
+      "availability": "available",
+      "tested": false
+    }
+  ],
+  "keepExistingWithoutKnownGatewayPrice": [
+    {
+      "id": "xiaomi/mimo-v2.6-flash",
+      "name": "MiMo V2.6 Flash",
+      "gatewayPrice": null,
+      "thinkingCapability": "enabled_disabled_existing_contract",
+      "defaultThinking": "disabled",
+      "source": "Project Clearling/docs/model-contracts.md"
+    },
+    {
+      "id": "xiaomi/mimo-v2.6-pro",
+      "name": "MiMo V2.6 Pro",
+      "gatewayPrice": null,
+      "thinkingCapability": "enabled_disabled_existing_contract",
+      "defaultThinking": "disabled",
+      "source": "Project Clearling/docs/model-contracts.md"
+    },
+    {
+      "id": "gpt-5.4-mini",
+      "name": "GPT-5.4 Mini",
+      "gatewayPrice": null,
+      "efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh"
+      ],
+      "source": "Project Clearling/docs/model-contracts.md"
+    }
+  ],
+  "counts": {
+    "allGatewayModels": 41,
+    "chatTextModels": 37,
+    "pricedLowCandidates": 16,
+    "overlapWithExistingSix": 3,
+    "newUniqueCandidates": 13,
+    "presetsAfterUnion": 19
+  },
+  "sonnetHighProbe": {
+    "id": "anthropic/claude-sonnet-5-5",
+    "name": "Claude Sonnet 5.5",
+    "currency": "USD",
+    "inputPerMillion": 2,
+    "outputPerMillion": 10,
+    "cacheReadPerMillion": 0.2,
+    "cacheWritePerMillion": 2.5,
+    "efforts": [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+    ],
+    "defaultEffort": "high",
+    "chatCompletionsCandidateParameters": {
+      "reasoning_effort": "high",
+      "stream": false
+    },
+    "chatCompletionsVerified": false,
+    "lowPrice": false
+  }
+}
