@@ -1,5 +1,196 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>清译 · 设置</title><link rel="stylesheet" href="app.css"></head><body data-surface="options"><main id="app"><header class="app-header"><div class="brand"><img src="icons/48.png" width="32" height="32" alt=""><div><strong>清译</strong><span>Clearling</span></div></div><span class="edition">阅读设置</span></header><div class="options-layout"><aside><nav class="tabs" aria-label="设置分类"><button data-tab="models" class="active" aria-pressed="true"><i data-lucide="sliders-horizontal" aria-hidden="true"></i>阅读与模型</button><button data-tab="connection" aria-pressed="false"><i data-lucide="plug-zap" aria-hidden="true"></i>网关连接</button></nav><div class="sidebar-note">少一点干扰。<br>专注每一段文字。</div></aside><div class="options-content"><section data-panel="models"><div class="panel-heading"><span class="eyebrow">READING</span><h1>让阅读回到内容本身</h1><p>选择适合你的阅读方式与翻译模型。</p></div><div class="panel"><div class="status-line"><span id="connection-status" class="status">未配置连接</span><label class="switch"><span>自动翻译</span><input id="automatic" type="checkbox" role="switch"><span class="switch-track" aria-hidden="true"></span></label></div><div class="field"><label for="display-mode">阅读方式</label><select id="display-mode"><option value="translated">仅显示译文</option><option value="bilingual">双语对照</option><option value="original">显示原文</option></select></div></div><div class="panel"><div class="field model-field"><div class="field-heading"><label for="model">翻译模型</label><span id="model-count" class="quiet" role="status" aria-live="polite"></span></div><div class="search-field"><i data-lucide="search" aria-hidden="true"></i><input id="model-search" type="search" placeholder="搜索模型或厂商" aria-label="搜索模型" autocomplete="off"></div><select id="model" aria-describedby="model-meta model-price"></select><span id="model-empty" class="hint" role="status" hidden>没有匹配的模型，换个关键词试试。</span></div>
-<div class="model-details"><div id="model-meta" class="model-meta"></div><div id="model-price" class="price-line"></div></div>
-<div class="setting-row" id="thinking-row"><label class="switch"><span>深度思考</span><input id="thinking" type="checkbox" role="switch"><span class="switch-track" aria-hidden="true"></span></label></div><div class="field" id="effort-row"><label for="effort">推理强度</label><select id="effort"></select></div>
-<button id="apply-model" class="primary command"><i data-lucide="check" aria-hidden="true"></i><span>应用模型</span></button></div><details class="custom-model panel"><summary>添加自定义模型<i data-lucide="plus" aria-hidden="true"></i></summary><div class="details-body"><div class="field"><label for="custom-name">显示名称</label><input id="custom-name" autocomplete="off" placeholder="我的翻译模型"></div><div class="field"><label for="custom-id">模型 ID</label><input id="custom-id" autocomplete="off" spellcheck="false" placeholder="provider/model-id"></div><button id="add-model" class="command"><i data-lucide="plus" aria-hidden="true"></i><span>添加模型</span></button></div></details></section><section data-panel="connection" hidden><div class="panel-heading"><span class="eyebrow">CONNECTION</span><h1>连接你的模型</h1><p>配置一次，浏览时自动翻译。</p></div><div class="panel"><div class="field"><label for="endpoint">网关地址</label><input id="endpoint" type="url" placeholder="https://gateway.example/v1" autocomplete="off" spellcheck="false"></div><div class="field"><label for="api-key">API Key</label><input id="api-key" type="password" placeholder="输入 API Key" autocomplete="new-password" spellcheck="false"></div><div class="field"><label for="connection-kind">参数协议</label><select id="connection-kind"><option value="cindy">Cindy AI 网关</option><option value="native">OpenAI 兼容接口</option></select></div><p class="hint">外文段落仅发送至你配置的网关。</p><div class="command-row"><button id="save-connection" class="primary command"><i data-lucide="save" aria-hidden="true"></i><span>保存连接</span></button><button id="test-connection" class="command"><i data-lucide="plug-zap" aria-hidden="true"></i><span>测试连接</span></button></div></div><div class="panel maintenance"><div class="setting-row"><div><strong>译文缓存</strong><p class="hint">清除后，再次浏览时会重新翻译。</p></div><button id="clear-cache" class="text-button">清除缓存</button></div><div class="setting-row"><div><strong>网关凭据</strong><p class="hint">移除后自动翻译将暂停。</p></div><button id="clear-connection" class="text-button danger">移除连接</button></div></div></section><p id="notice" class="notice" role="status" aria-live="polite"></p><footer><span id="footer-model">MiMo V2.6 Flash</span><span>v0.4.0</span></footer></div></div></main><script type="module" src="app.js"></script></body></html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>清译 · 设置</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body data-surface="options">
+<main id="app">
+<header class="app-header">
+<div class="brand">
+<img src="icons/48.png" width="32" height="32" alt="">
+<div>
+<strong>清译</strong>
+<span>Clearling</span>
+</div>
+</div>
+<span class="edition">阅读设置</span>
+</header>
+<div class="options-layout">
+<aside>
+<nav class="tabs" aria-label="设置分类">
+<button data-tab="models" class="active" aria-pressed="true">
+<i data-lucide="sliders-horizontal" aria-hidden="true">
+</i>阅读与模型</button>
+<button data-tab="connection" aria-pressed="false">
+<i data-lucide="plug-zap" aria-hidden="true">
+</i>网关连接</button>
+</nav>
+<div class="sidebar-note">少一点干扰。<br>专注每一段文字。</div>
+</aside>
+<div class="options-content">
+<section data-panel="models">
+<div class="panel-heading">
+<span class="eyebrow">READING</span>
+<h1>阅读，不必切换语言。</h1>
+<p>让陌生的语言，成为熟悉的文字。</p>
+</div>
+<div class="panel">
+<h2 class="panel-title">
+<span>01</span> 阅读偏好</h2>
+<div id="setup-prompt" class="setup-prompt" hidden>
+<p>连接模型，开始自动阅读。</p>
+<button id="configure-connection" class="text-button">配置连接</button>
+</div>
+<div class="status-line">
+<span id="connection-status" class="status" role="status">正在载入…</span>
+<label class="switch">
+<span>自动翻译</span>
+<input id="automatic" type="checkbox" role="switch">
+<span class="switch-track" aria-hidden="true">
+</span>
+</label>
+</div>
+<div class="field">
+<label for="display-mode">阅读方式</label>
+<select id="display-mode">
+<option value="translated">仅显示译文</option>
+<option value="bilingual">双语对照</option>
+<option value="original">显示原文</option>
+</select>
+<p class="hint" id="reading-hint">保留网页结构，复杂排版会保留原文对照。</p>
+</div>
+</div>
+<div class="panel">
+<h2 class="panel-title">
+<span>02</span> 翻译模型</h2>
+<div class="field model-field">
+<div class="field-heading">
+<label for="model">翻译模型</label>
+<span id="model-count" class="quiet" role="status" aria-live="polite">
+</span>
+</div>
+<div class="search-field">
+<i data-lucide="search" aria-hidden="true">
+</i>
+<input id="model-search" type="search" placeholder="搜索模型或厂商" aria-label="搜索模型" autocomplete="off">
+</div>
+<select id="model" aria-describedby="model-meta model-price">
+</select>
+<span id="model-empty" class="hint" role="status" hidden>没有匹配的模型，换个关键词试试。</span>
+</div>
+<div class="model-details">
+<div id="model-draft" class="quiet draft-hint" role="status" hidden>有未应用的更改</div>
+<div id="model-meta" class="model-meta">
+</div>
+<div id="model-price" class="price-line">
+</div>
+</div>
+<div class="setting-row" id="thinking-row">
+<label class="switch">
+<span>深度思考</span>
+<input id="thinking" type="checkbox" role="switch">
+<span class="switch-track" aria-hidden="true">
+</span>
+</label>
+</div>
+<div class="field" id="effort-row">
+<label for="effort">推理强度</label>
+<select id="effort">
+</select>
+</div>
+<button id="apply-model" class="primary command">
+<i data-lucide="check" aria-hidden="true">
+</i>
+<span>应用模型</span>
+</button>
+</div>
+<details class="custom-model panel">
+<summary>添加自定义模型<i data-lucide="plus" aria-hidden="true">
+</i>
+</summary>
+<div class="details-body">
+<div class="field">
+<label for="custom-name">显示名称</label>
+<input id="custom-name" autocomplete="off" placeholder="我的翻译模型">
+</div>
+<div class="field">
+<label for="custom-id">模型 ID</label>
+<input id="custom-id" autocomplete="off" spellcheck="false" placeholder="provider/model-id">
+</div>
+<button id="add-model" class="command">
+<i data-lucide="plus" aria-hidden="true">
+</i>
+<span>添加模型</span>
+</button>
+</div>
+</details>
+</section>
+<section data-panel="connection" hidden>
+<div class="panel-heading">
+<span class="eyebrow">CONNECTION</span>
+<h1>连接你的模型</h1>
+<p>你的网关，你的模型。保存后即可开始阅读。</p>
+</div>
+<div class="panel">
+<div class="field">
+<label for="endpoint">网关地址</label>
+<input id="endpoint" type="url" placeholder="https://gateway.example/v1" autocomplete="off" spellcheck="false">
+</div>
+<div class="field">
+<label for="api-key">API Key</label>
+<input id="api-key" type="password" placeholder="输入 API Key" autocomplete="new-password" spellcheck="false">
+</div>
+<div class="field">
+<label for="connection-kind">参数协议</label>
+<select id="connection-kind">
+<option value="cindy">Cindy AI 网关</option>
+<option value="native">OpenAI 兼容接口</option>
+</select>
+</div>
+<p class="hint">外文段落仅发送至你配置的网关。</p>
+<p id="connection-draft" class="hint draft-hint" role="status" hidden>连接有未保存的更改，请先保存再测试。</p>
+<div class="command-row">
+<button id="save-connection" class="primary command">
+<i data-lucide="save" aria-hidden="true">
+</i>
+<span>保存连接</span>
+</button>
+<button id="test-connection" class="command">
+<i data-lucide="plug-zap" aria-hidden="true">
+</i>
+<span>测试连接</span>
+</button>
+</div>
+</div>
+<div class="panel maintenance">
+<div class="setting-row">
+<div>
+<strong>译文缓存</strong>
+<p class="hint">清除后，再次浏览时会重新翻译。</p>
+</div>
+<button id="clear-cache" class="text-button">清除缓存</button>
+</div>
+<div class="setting-row">
+<div>
+<strong>网关凭据</strong>
+<p class="hint">移除后自动翻译将暂停。</p>
+</div>
+<button id="clear-connection" class="text-button danger">移除连接</button>
+</div>
+</div>
+</section>
+<p id="notice" class="notice" role="status" aria-live="polite"></p>
+<footer>
+<span id="footer-model">MiMo V2.6 Flash</span>
+<span>v0.4.0</span>
+</footer>
+</div>
+</div>
+</main>
+<script type="module" src="app.js">
+</script>
+</body>
+</html>

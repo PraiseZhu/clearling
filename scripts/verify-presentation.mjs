@@ -15,15 +15,15 @@ try {
  let state=await rpc({type:'GET_STATE'});assert.equal(state.settings.hasKey,false);assert.equal(state.settings.displayMode,'translated');
  state=await rpc({type:'SAVE_CONNECTION',endpoint:line.url,apiKey:'fixture',connectionKind:'cindy',expectedRevision:state.settings.revision});
  const page=await cdp.page(`${line.url}/x-thread`,{hidden:false});
- const ready=selector=>`document.querySelector(${JSON.stringify(selector)})?.nextElementSibling?.dataset.phase==='ready'`;
+ const ready=selector=>`(()=>{const e=document.querySelector(${JSON.stringify(selector)});return (e?.querySelector(':scope > [data-clearling=translation]') || e?.nextElementSibling)?.dataset.phase==='ready'})()`;
  const scroll=selector=>cdp.evaluate(page,`(()=>{const e=document.querySelector(${JSON.stringify(selector)});(e.hasAttribute('data-cl-source')?e.nextElementSibling:e).scrollIntoView({block:'center'})})()`);
- try{await cdp.wait(page,ready('#main-text'));}catch(error){console.log({fixture:await cdp.evaluate(page,'({hidden:document.hidden,source:document.querySelector("#main-text")?.textContent,phases:[...document.querySelectorAll("[data-clearling]")].map(e=>e.dataset.phase)})'),metrics:await fetch(line.url+'/metrics').then(r=>r.json()),exceptions:cdp.events.filter(e=>e.method==="Runtime.exceptionThrown").map(e=>e.params.exceptionDetails.text)});throw error;}
+ try{await cdp.wait(page,ready('#main-text'));}catch(error){console.log({fixture:await cdp.evaluate(page,'({hidden:document.hidden,source:document.querySelector("#main-text")?.textContent,phases:[...document.querySelectorAll("[data-clearling]")].map(e=>e.dataset.phase)})'),diagnostics:await cdp.evaluate(options,`(async()=>{const tabs=await chrome.tabs.query({});const tab=tabs.find(t=>t.url===${JSON.stringify(line.url+'/x-thread')});return chrome.tabs.sendMessage(tab.id,{type:'GET_DIAGNOSTICS'})})()`,true).catch(e=>e.message),publicState:((s)=>({automatic:s.automatic,hasKey:s.hasKey,mode:s.displayMode,excludedSites:s.excludedSites}))((await rpc({type:'GET_STATE'})).settings),contexts:cdp.events.filter(e=>e.method==='Runtime.executionContextCreated'&&e.sessionId===page.sessionId).map(e=>({name:e.params.context.name,type:e.params.context.auxData?.type})),metrics:await fetch(line.url+'/metrics').then(r=>r.json()),exceptions:cdp.events.filter(e=>e.method==="Runtime.exceptionThrown").map(e=>e.params.exceptionDetails.text)});throw error;}
  assert.equal(await cdp.evaluate(page,'getComputedStyle(document.querySelector("#main-text")).display'),'none');
  const original=await cdp.evaluate(page,'document.querySelector("#main-text").innerHTML');
  checks.push('default translation-only hides source without mutating its original children');
  for(const selector of ['#reply-text','#short','#inline','#card-title','#card-summary','#article-title','#article-paragraph','#article-list','#article-quote','#article-embedded','#recycled-text']) {
    await scroll(selector);await cdp.wait(page,ready(selector));
-   assert.equal(await cdp.evaluate(page,`getComputedStyle(document.querySelector(${JSON.stringify(selector)})).display`),'none',selector);
+   assert.equal(await cdp.evaluate(page,`(()=>{const e=document.querySelector(${JSON.stringify(selector)});return e.querySelector(':scope > [data-clearling=translation]') ? getComputedStyle(e).display!=='none' : getComputedStyle(e).display==='none'})()`),true,selector);
  }
  assert.equal(await cdp.evaluate(page,'document.querySelectorAll("#article-card [data-clearling][data-phase=ready]").length'),2);
  checks.push('quote cards, article titles, paragraphs, list items and embedded quotes translate once');
@@ -74,7 +74,7 @@ try {
 
  state=await rpc({type:'SET_DISPLAY_MODE',mode:'translated',expectedPresentationRevision:state.settings.presentationRevision});
  await cdp.wait(page,ready('#table-cell'));
- await cdp.evaluate(page,'document.querySelector("#table-cell").nextElementSibling.remove()');
+ await cdp.evaluate(page,'document.querySelector("#table-cell [data-clearling=translation]").remove()');
  await cdp.wait(page,ready('#table-cell'));
  checks.push('table projection ownership survives mode conversion and host removal');
  await cdp.evaluate(page,`(()=>{const host=document.createElement('x-public-example');host.style.display='block';document.querySelector('main').prepend(host);setTimeout(()=>{const root=host.attachShadow({mode:'open'});root.innerHTML='<p id="shadow-text">The update preserves existing settings. If validation fails, the previous configuration remains active and no changes are applied.</p>';},50);})()`);

@@ -50,7 +50,9 @@ export async function digest(value) {
 }
 
 export async function cacheKey(config, block, hostname) {
-  return digest(JSON.stringify([fingerprint(config), hostname, block.context ?? '', block.text.replace(/\s+/g, ' ').trim()]));
+  // Version the key so previously accepted, structurally invalid results cannot
+  // survive stricter validation. Paragraph breaks are part of the source.
+  return digest(JSON.stringify(['paragraph-2', fingerprint(config), hostname, block.context ?? '', block.text.trim()]));
 }
 
 export function validateBlocks(blocks) {
@@ -82,7 +84,7 @@ export function parseTranslations(content, blocks) {
     const source = expected.get(item.id);
     const tokens = source.text.match(/⟦CLR\d+_\d+⟧/g) || [];
     const returnedTokens = item.text.match(/⟦CLR\d+_\d+⟧/g) || [];
-    if (JSON.stringify([...tokens].sort()) !== JSON.stringify([...returnedTokens].sort())) throw new Error('RESPONSE_INCOMPLETE');
+    if (JSON.stringify(tokens) !== JSON.stringify(returnedTokens)) throw new Error('RESPONSE_INCOMPLETE');
     return { id: item.id, text: item.text.trim(), sourceHash: source.sourceHash };
   });
 }

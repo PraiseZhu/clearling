@@ -19,6 +19,7 @@ export function createView(item, onOriginal, onRetry) {
   const node = document.createElement(tag); node.className = 'clearling-translation'; node.dataset.clearling = 'translation'; node.lang = 'zh-CN'; node.dir = 'auto';
   Object.assign(node.style, item.textStyle);
   if (tag === 'td' || tag === 'th') for (const name of ['colspan','rowspan','scope','headers']) if (item.element.hasAttribute(name)) node.setAttribute(name,item.element.getAttribute(name));
+  if (tag === 'li' && item.element.hasAttribute('value')) node.setAttribute('value',item.element.getAttribute('value'));
   if (item.element.matches('h1,h2,h3,h4,h5,h6')) { node.setAttribute('role','heading'); node.setAttribute('aria-level', item.element.tagName[1]); }
   if (item.placement === 'after') item.element.after(node); else item.element.append(node);
   item.translation = node; item.placeholderHeight = Math.min(900, height);
@@ -67,10 +68,13 @@ export function present(item, mode, phase = item.phase || 'pending', content = n
       const original = document.createElement('button'); original.type='button'; original.textContent='查看原文'; original.onclick = e => { e.preventDefault(); e.stopPropagation(); item.onOriginal(); };
       node.replaceChildren(status, original);
       if (phase === 'failed') { const retry=document.createElement('button');retry.type='button';retry.textContent='重试';retry.onclick=e=>{e.preventDefault();e.stopPropagation();item.onRetry();};node.append(retry); }
-      node.style.minHeight = phase === 'pending' ? `${item.placeholderHeight}px` : '';
+      node.style.minHeight = phase === 'pending' && item.replaceable ? `${item.placeholderHeight}px` : '';
     }
   }
   item.phase = phase; node.dataset.phase = phase;
+  // The host's original content determines intrinsic column/item widths. The
+  // added translation wraps within that width instead of resizing the layout.
+  node.style.contain = item.placement === 'inside' || node.dataset.inside === 'true' ? 'inline-size' : '';
   const original = mode === 'original' || item.showOriginal || isInteracting(item);
   node.hidden = original || (mode === 'bilingual' && phase === 'pending');
   const hideSource = !original && mode === 'translated' && item.replaceable;

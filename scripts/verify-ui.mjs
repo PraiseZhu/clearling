@@ -11,10 +11,16 @@ const line=await new Promise(resolve=>{const reader=createInterface({input:serve
 let browser,options;const checks=[];
 try{
  browser=await launchBrowser(kind,{profileName:`${kind}-qa-ui-v040`});const cdp=browser.cdp;
- const id=await loadCurrentExtension(cdp,path.resolve(process.env.CLEARLING_BUILD_DIR||'artifacts/build-0.4.0'));
+ const id=await loadCurrentExtension(cdp,path.resolve(process.env.CLEARLING_BUILD_DIR||'dist'));
  options=await cdp.page(`chrome-extension://${id}/options.html`,{hidden:false});await cdp.wait(options,`document.querySelector('#model')?.options.length===${PROFILES.length}`);
  const rpc=m=>cdp.evaluate(options,`chrome.runtime.sendMessage(${JSON.stringify(m)})`,true);
  let state=await rpc({type:'GET_STATE'});assert.equal(state.settings.hasKey,false);
+ assert.equal(await cdp.evaluate(options,'document.querySelector("#setup-prompt").hidden'),false);
+ await cdp.evaluate(options,'document.querySelector("#configure-connection").click()');
+ assert.equal(await cdp.evaluate(options,'document.activeElement.id'),'endpoint');
+ assert.equal(await cdp.evaluate(options,'document.querySelector("#test-connection").disabled'),true);
+ await cdp.evaluate(options,'document.querySelector("[data-tab=models]").click()');
+ checks.push('unconfigured state offers a direct connection path and prevents meaningless tests');
  assert.equal(await cdp.evaluate(options,'!!document.querySelector("#compare,[data-tab=compare],#export-results")'),false);
  assert.equal((await rpc({type:'COMPARE_MODEL'})).code,'FORBIDDEN');checks.push('comparison UI, export and runtime endpoint removed');
  await cdp.evaluate(options,'document.querySelector("#model-search").value="gemini";document.querySelector("#model-search").dispatchEvent(new Event("input"))');
@@ -33,23 +39,29 @@ try{
  const display=await rpc({type:'SET_DISPLAY_MODE',mode:'bilingual',expectedPresentationRevision:before.settings.presentationRevision});
  await cdp.wait(options,'document.querySelector("#display-mode").value==="bilingual"');
  assert.equal(await cdp.evaluate(options,'document.querySelector("#model").value'),'google/gemini-3.8-flash');assert.equal(await cdp.evaluate(options,'document.querySelector("#effort").value'),'high');
- await cdp.evaluate(options,'document.querySelector("#apply-model").click()');
+ const busy=await cdp.evaluate(options,'(()=>{document.querySelector("#apply-model").click();return {busy:document.querySelector("#apply-model").getAttribute("aria-busy"),text:document.querySelector("#apply-model").textContent,locked:["model","model-search","thinking","effort"].every(id=>document.getElementById(id).disabled)}})()');
+ assert.equal(busy.busy,'true');assert.match(busy.text,/应用中/);assert.equal(busy.locked,true);
  await cdp.wait(options,'document.querySelector("#notice").textContent.includes("已切换")');state=await rpc({type:'GET_STATE'});assert.equal(state.settings.selection.effort,'high');
+ assert.equal(await cdp.evaluate(options,'document.querySelector("#apply-model").disabled && document.querySelector("#model-draft").hidden'),true);
+ checks.push('apply exposes progress, locks its draft and settles to the applied state');
  const bad=await rpc({type:'SELECT_MODEL',selection:{modelId:'missing-model',thinking:'disabled',effort:null},expectedRevision:state.settings.revision});assert.equal(bad.ok,false);assert.equal((await rpc({type:'GET_STATE'})).settings.selection.modelId,state.settings.selection.modelId);
  checks.push('model draft survives presentation updates; invalid choices preserve working model');
  await cdp.evaluate(options,'document.querySelector("[data-tab=connection]").click();document.querySelector("#endpoint").value="https://example.invalid";document.querySelector("#endpoint").dispatchEvent(new Event("input"))');
  await rpc({type:'SET_DISPLAY_MODE',mode:'translated',expectedPresentationRevision:display.settings.presentationRevision});
  await cdp.wait(options,'document.querySelector("#display-mode").value==="translated"');assert.equal(await cdp.evaluate(options,'document.querySelector("#endpoint").value'),'https://example.invalid');
- checks.push('unsaved connection draft survives unrelated storage updates');
+ assert.equal(await cdp.evaluate(options,'document.querySelector("#test-connection").disabled && !document.querySelector("#connection-draft").hidden'),true);
+ checks.push('unsaved connection draft survives unrelated storage updates and cannot test saved credentials as if they were the draft');
  state=await rpc({type:'GET_STATE'});state=await rpc({type:'SELECT_MODEL',selection:defaultSelection(),expectedRevision:state.settings.revision});
  await cdp.evaluate(options,'document.querySelector("[data-tab=models]").click()');
+ const readingPage=await cdp.page(`${line.url}/article?ui`,{hidden:false});await cdp.call('Target.activateTarget',{targetId:readingPage.targetId});
  const popup=await cdp.page(`chrome-extension://${id}/popup.html`,{hidden:false});await cdp.wait(popup,`document.querySelector('#model')?.options.length===${PROFILES.length}`);
  await mkdir('artifacts',{recursive:true});
  for(const [page,width,height,name] of [[popup,376,600,'popup'],[options,1100,1000,'settings'],[options,390,900,'settings-narrow']]){
    await cdp.call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false},page.sessionId);
    await cdp.call('Emulation.setEmulatedMedia',{features:[{name:'prefers-color-scheme',value:'light'}]},page.sessionId);
+   await cdp.evaluate(page, '(async()=>{window.scrollTo(0,0);const content=document.querySelector(".popup-content");if(content)content.scrollTop=0;await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));await Promise.all(document.getAnimations().map(a=>a.finished.catch(()=>{})))})()',true);
    const geometry=await cdp.evaluate(page,'({bg:getComputedStyle(document.body).backgroundColor,width:innerWidth,scrollWidth:document.documentElement.scrollWidth,height:document.body.scrollHeight})');
-   assert.equal(geometry.bg,'rgb(9, 10, 12)');assert.ok(geometry.scrollWidth<=geometry.width+1);
+   assert.equal(geometry.bg,'rgb(8, 8, 8)');assert.ok(geometry.scrollWidth<=geometry.width+1);
    const shot=await cdp.call('Page.captureScreenshot',{format:'png',captureBeyondViewport:false,clip:{x:0,y:0,width,height:name==='popup'?Math.min(geometry.height,600):height,scale:1}},page.sessionId);await writeFile(`artifacts/ui-${kind}-${name}.png`,Buffer.from(shot.data,'base64'));
    if(name==='popup')console.log({popupHeight:geometry.height});
  }
@@ -64,6 +76,13 @@ try{
  await cdp.evaluate(popup,`document.querySelector('#model-search').focus()`);const focus=[];
  for(let i=0;i<8;i++){await cdp.call('Input.dispatchKeyEvent',{type:'keyDown',key:'Tab',code:'Tab',windowsVirtualKeyCode:9},popup.sessionId);await cdp.call('Input.dispatchKeyEvent',{type:'keyUp',key:'Tab',code:'Tab',windowsVirtualKeyCode:9},popup.sessionId);focus.push(await cdp.evaluate(popup,'document.activeElement?.id'));}
  assert.ok(focus.includes('model') && focus.includes('effort') && focus.includes('apply-model'),JSON.stringify(focus));checks.push('keyboard navigation reaches model, effort and apply controls');
+ await cdp.wait(popup,'document.querySelector("#site-enabled").checked && !document.querySelector("#site-enabled").disabled');
+ state=await rpc({type:'GET_STATE'});
+ state=await rpc({type:'TOGGLE_SITE',url:line.url,expectedRevision:state.settings.revision});
+ await cdp.wait(popup,'!document.querySelector("#site-enabled").checked && document.querySelector("#refresh-page").disabled');
+ state=await rpc({type:'TOGGLE_SITE',url:line.url,expectedRevision:state.settings.revision});
+ await cdp.wait(popup,'document.querySelector("#site-enabled").checked && !document.querySelector("#refresh-page").disabled');
+ checks.push('site controls track settings changed in another surface and disable unavailable refresh');
  await fetch(line.url+'/failure-mode',{method:'POST',body:JSON.stringify({rateLimit:true})});
  state=await rpc({type:'GET_STATE'});const workingModel=state.settings.selection.modelId;
  await cdp.evaluate(options,`document.querySelector('[data-tab=models]').click();document.querySelector('#model').value='openai/gpt-5.6-luna';document.querySelector('#model').dispatchEvent(new Event('change'));document.querySelector('#apply-model').click();`);
@@ -72,6 +91,9 @@ try{
  await fetch(line.url+'/failure-mode',{method:'POST',body:JSON.stringify({rateLimit:false})});
  checks.push('429 apply failure preserves both active model and unsaved draft with a visible error');
 
+ await cdp.call('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]},options.sessionId);
+ assert.equal(await cdp.evaluate(options,'getComputedStyle(document.querySelector("[data-panel=models]")).animationName'),'none');
+ checks.push('reduced-motion preference disables entry and busy animations');
  const errors=cdp.events.filter(e=>e.method==='Runtime.exceptionThrown').map(e=>e.params.exceptionDetails.text);assert.deepEqual(errors,[]);
  const report={browser:kind,version:await cdp.evaluate(options,'chrome.runtime.getManifest().version'),presets:PROFILES.length,checks,syntheticOnly:true,time:new Date().toISOString()};await writeFile(`artifacts/ui-${kind}.json`,JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
 }finally{

@@ -29,8 +29,12 @@ export function eligibleText(text, { site = 'generic', lang = '' } = {}) {
   return site === 'x' || plain.length >= 5;
 }
 export function safeFlow(element) {
-  if (element.hasAttribute('data-cl-source') && element.nextElementSibling?.matches('[data-clearling="translation"]')) return true;
-  const style = getComputedStyle(element);
+  const hiddenByUs = element.hasAttribute('data-cl-source');
+  if (hiddenByUs) element.removeAttribute('data-cl-source');
+  // Read values before restoring the attribute: computed styles are live.
+  const computed = getComputedStyle(element);
+  const style = { display: computed.display, visibility: computed.visibility, position: computed.position, flexDirection: computed.flexDirection };
+  if (hiddenByUs) element.setAttribute('data-cl-source', '');
   if (style.display === 'none' || style.visibility === 'hidden' || ['fixed', 'absolute'].includes(style.position)) return false;
   if (style.display.includes('grid')) return false;
   if (style.display.includes('flex')) return style.flexDirection === 'column';
@@ -84,12 +88,26 @@ export function planElement(element, site = 'generic') {
   if (!eligibleText(source.text, { site, lang })) return null;
   if (!special && !element.matches(SEMANTIC_SELECTOR)) {
     if (source.text.length < 30 || element.querySelector('input,textarea,[contenteditable="true"]')) return null;
-    if (element.querySelectorAll('a').length > 2 && source.text.length < 100) return null;
+    if ([...element.querySelectorAll('a')].filter(node => !node.closest(OWN)).length > 2 && source.text.length < 100) return null;
   }
   if (!element.parentNode) return null;
   const hasNative = selector => [...element.querySelectorAll(selector)].some(node => !node.closest(OWN));
-  const interactive = hasNative('button,input,select,textarea,video,audio,iframe,canvas,svg,math,[role="button"],[contenteditable]:not([contenteditable="false"])');
-  const mixed = interactive || !special && hasNative(`${SEMANTIC_SELECTOR},div,ul,ol,table`);
+  const interactive = hasNative('button,input,select,textarea,img,picture,video,audio,iframe,canvas,svg,math,[translate="no"],.notranslate,[role="button"],[contenteditable]:not([contenteditable="false"])');
+  const style = getComputedStyle(element);
+  const parent = element.parentElement || element.getRootNode().host;
+  const parentStyle = parent ? getComputedStyle(parent) : null;
+  // A projection cannot inherit the source's grid placement, flex sizing, box
+  // decoration or generated content. Keep those host-owned boxes in place.
+  const layoutBox = element.matches('td,th') || parentStyle?.display.includes('grid')
+    || parentStyle?.display.includes('flex') && (parentStyle.flexDirection !== 'column' || style.flexGrow !== '0' || style.flexShrink !== '1' || style.flexBasis !== 'auto' || style.order !== '0' || style.alignSelf !== 'auto')
+    || ['paddingTop','paddingRight','paddingBottom','paddingLeft','borderTopWidth','borderRightWidth','borderBottomWidth','borderLeftWidth'].some(key => parseFloat(style[key]) > 0)
+    || !['rgba(0, 0, 0, 0)', 'transparent'].includes(style.backgroundColor)
+    || style.backgroundImage !== 'none'
+    || ['::before','::after'].some(pseudo => !['none','normal','""'].includes(getComputedStyle(element,pseudo).content));
+  // Appending to clipped layout boxes could hide the translation or its native
+  // controls. Leave these candidates to the website's own expansion controls.
+  const mixed = interactive || layoutBox || !special && hasNative(`${SEMANTIC_SELECTOR},div,ul,ol,table`);
+  if ((mixed || element.tagName === 'SUMMARY') && [style.overflowX, style.overflowY].some(value => ['hidden','clip','scroll','auto'].includes(value))) return null;
   // A mixed container's descendants must keep their native layout and controls.
   return { ...source, placement: mixed || element.tagName === 'SUMMARY' ? 'inside' : 'after', replaceable: !mixed && element.tagName !== 'SUMMARY', kind, lang };
 }
@@ -120,4 +138,14 @@ export function splitSource(text, limit = 1800) {
     if (start > output[i].lastIndexOf('⟧')) { output[i + 1] = output[i].slice(start) + output[i + 1]; output[i] = output[i].slice(0, start); }
   }
   return output.filter(Boolean);
+}
+
+/** Provider JSON trims chunks; preserve paragraph separators locally. */
+export function joinTranslations(chunks, translations) {
+  return translations.map((text, index) => {
+    if (!index) return text.trim();
+    const boundary = (chunks[index - 1].match(/\s+$/)?.[0] || '') + (chunks[index].match(/^\s+/)?.[0] || '');
+    const breaks = boundary.match(/\n/g)?.length || 0;
+    return (breaks ? '\n'.repeat(breaks) : '') + text.trim();
+  }).join('');
 }

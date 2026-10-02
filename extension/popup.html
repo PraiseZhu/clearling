@@ -1,5 +1,120 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>清译</title><link rel="stylesheet" href="app.css"></head><body data-surface="popup"><main id="app"><header class="app-header"><div class="brand"><img src="icons/48.png" width="32" height="32" alt=""><div><strong>清译</strong><span>Clearling</span></div></div><button class="icon-button" id="open-settings" title="打开设置" aria-label="打开设置"><i data-lucide="settings-2" aria-hidden="true"></i></button></header><div class="status-line"><span id="connection-status" class="status">未配置连接</span><label class="switch"><span>自动翻译</span><input id="automatic" type="checkbox" role="switch"><span class="switch-track" aria-hidden="true"></span></label></div><div class="popup-content"><section class="reading-section"><div class="field"><label for="display-mode">阅读方式</label><select id="display-mode"><option value="translated">仅显示译文</option><option value="bilingual">双语对照</option><option value="original">显示原文</option></select></div></section><section class="model-section"><div class="field model-field"><div class="field-heading"><label for="model">翻译模型</label><span id="model-count" class="quiet" role="status" aria-live="polite"></span></div><div class="search-field"><i data-lucide="search" aria-hidden="true"></i><input id="model-search" type="search" placeholder="搜索模型或厂商" aria-label="搜索模型" autocomplete="off"></div><select id="model" aria-describedby="model-meta model-price"></select><span id="model-empty" class="hint" role="status" hidden>没有匹配的模型，换个关键词试试。</span></div>
-<div class="model-details"><div id="model-meta" class="model-meta"></div><div id="model-price" class="price-line"></div></div>
-<div class="setting-row" id="thinking-row"><label class="switch"><span>深度思考</span><input id="thinking" type="checkbox" role="switch"><span class="switch-track" aria-hidden="true"></span></label></div><div class="field" id="effort-row"><label for="effort">推理强度</label><select id="effort"></select></div>
-</section><section class="page-section"><div class="section-title"><div><span class="eyebrow">当前网站</span><h2 id="page-host">当前页面</h2></div><div class="page-actions"><button id="refresh-page" class="icon-button" title="重新翻译" aria-label="重新翻译当前页"><i data-lucide="refresh-cw" aria-hidden="true"></i></button><label class="switch compact" title="此站点自动翻译"><input id="site-enabled" type="checkbox" role="switch" aria-label="此站点自动翻译"><span class="switch-track" aria-hidden="true"></span></label></div></div></section></div><button id="apply-model" class="primary command"><i data-lucide="check" aria-hidden="true"></i><span>应用模型</span></button><p id="notice" class="notice" role="status" aria-live="polite"></p><footer><span id="footer-model">MiMo V2.6 Flash</span><span>v0.4.0</span></footer></main><script type="module" src="app.js"></script></body></html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>清译</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body data-surface="popup">
+<main id="app">
+<header class="app-header">
+<div class="brand">
+<img src="icons/48.png" width="32" height="32" alt="">
+<div>
+<strong>清译</strong>
+<span>Clearling</span>
+</div>
+</div>
+<button class="icon-button" id="open-settings" title="打开设置" aria-label="打开设置">
+<i data-lucide="settings-2" aria-hidden="true">
+</i>
+</button>
+</header>
+<div class="status-line">
+<span id="connection-status" class="status" role="status">正在载入…</span>
+<label class="switch">
+<span>自动翻译</span>
+<input id="automatic" type="checkbox" role="switch">
+<span class="switch-track" aria-hidden="true">
+</span>
+</label>
+</div>
+<div class="popup-content">
+<div id="setup-prompt" class="setup-prompt" hidden>
+<p>连接模型，开始自动阅读。</p>
+<button id="configure-connection" class="text-button">配置连接</button>
+</div>
+<section class="page-section">
+<div class="section-title">
+<div>
+<span class="eyebrow">当前网站</span>
+<h2 id="page-host">当前页面</h2>
+</div>
+<div class="page-actions">
+<button id="refresh-page" class="icon-button" title="重新翻译" aria-label="重新翻译当前页">
+<i data-lucide="refresh-cw" aria-hidden="true">
+</i>
+</button>
+<label class="switch compact" title="此站点自动翻译">
+<input id="site-enabled" type="checkbox" role="switch" aria-label="此站点自动翻译">
+<span class="switch-track" aria-hidden="true">
+</span>
+</label>
+</div>
+</div>
+</section>
+<section class="reading-section">
+<div class="field">
+<label for="display-mode">阅读方式</label>
+<select id="display-mode">
+<option value="translated">仅显示译文</option>
+<option value="bilingual">双语对照</option>
+<option value="original">显示原文</option>
+</select>
+<p class="hint" id="reading-hint">保留网页结构，复杂排版会保留原文对照。</p>
+</div>
+</section>
+<section class="model-section">
+<div class="field model-field">
+<div class="field-heading">
+<label for="model">翻译模型</label>
+<span id="model-count" class="quiet" role="status" aria-live="polite">
+</span>
+</div>
+<div class="search-field">
+<i data-lucide="search" aria-hidden="true">
+</i>
+<input id="model-search" type="search" placeholder="搜索模型或厂商" aria-label="搜索模型" autocomplete="off">
+</div>
+<select id="model" aria-describedby="model-meta model-price">
+</select>
+<span id="model-empty" class="hint" role="status" hidden>没有匹配的模型，换个关键词试试。</span>
+</div>
+<div class="model-details">
+<div id="model-draft" class="quiet draft-hint" role="status" hidden>有未应用的更改</div>
+<div id="model-meta" class="model-meta">
+</div>
+<div id="model-price" class="price-line">
+</div>
+</div>
+<div class="setting-row" id="thinking-row">
+<label class="switch">
+<span>深度思考</span>
+<input id="thinking" type="checkbox" role="switch">
+<span class="switch-track" aria-hidden="true">
+</span>
+</label>
+</div>
+<div class="field" id="effort-row">
+<label for="effort">推理强度</label>
+<select id="effort">
+</select>
+</div>
+</section>
+</div>
+<button id="apply-model" class="primary command">
+<i data-lucide="check" aria-hidden="true">
+</i>
+<span>应用模型</span>
+</button>
+<p id="notice" class="notice" role="status" aria-live="polite"></p>
+<footer>
+<span id="footer-model">MiMo V2.6 Flash</span>
+<span>v0.4.0</span>
+</footer>
+</main>
+<script type="module" src="app.js">
+</script>
+</body>
+</html>

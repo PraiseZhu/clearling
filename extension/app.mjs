@@ -15,6 +15,7 @@ let state;
 let activeTab;
 let modelDirty = false;
 let connectionDirty = false;
+const busyControls = new Set();
 const names = { minimal: '最轻 · minimal', low: '低 · low', medium: '中 · medium', high: '高 · high', xhigh: '极高 · xhigh', max: '最大 · max' };
 document.querySelector('footer span:last-child').textContent = `v${chrome.runtime.getManifest().version}`;
 const call = async payload => {
@@ -25,12 +26,45 @@ const call = async payload => {
   return result;
 };
 function notice(text, error = false) { $('notice').textContent = text; $('notice').classList.toggle('error', error); }
-async function action(button, operation) {
+async function action(button, operation, { label = '处理中…', controls = [] } = {}) {
   if (button.disabled) return;
-  button.disabled = true; notice('');
+  const locked = [button, ...controls.map($).filter(Boolean)];
+  const previous = locked.map(control => control.disabled);
+  const text = button.querySelector('span');
+  const oldText = text?.textContent;
+  for (const control of locked) { control.disabled = true; busyControls.add(control.id); }
+  button.setAttribute('aria-busy', 'true');
+  if (text) text.textContent = label;
+  notice(label);
   try { await operation(); }
   catch (error) { notice(error.message || '操作失败', true); if (error.code === 'CONFIG_CHANGED') await refresh(); }
-  finally { button.disabled = false; }
+  finally {
+    locked.forEach((control, i) => { control.disabled = previous[i]; busyControls.delete(control.id); });
+    button.removeAttribute('aria-busy');
+    if (text) text.textContent = oldText;
+    renderActionState();
+  }
+}
+
+function renderActionState() {
+  if (!state) return;
+  const apply = $('apply-model');
+  if (!busyControls.has('apply-model')) {
+    apply.querySelector('span').textContent = modelDirty ? '验证并应用' : '已应用';
+    apply.disabled = !modelDirty;
+  }
+  apply.dataset.dirty = String(modelDirty);
+  $('model-draft').hidden = !modelDirty;
+  if ($('connection-draft')) $('connection-draft').hidden = !connectionDirty;
+  if ($('test-connection') && !busyControls.has('test-connection')) $('test-connection').disabled = connectionDirty || !state.settings.hasKey;
+  if ($('thinking') && !busyControls.has('thinking')) $('thinking').disabled = getProfile($('model').value, state.settings.customProfiles)?.mode === 'required-effort';
+  if ($('refresh-page') && !busyControls.has('refresh-page')) {
+    const supported = /^https?:/.test(activeTab?.url || '');
+    const available = supported && state.settings.hasKey && state.settings.automatic && state.settings.displayMode !== 'original' && !state.settings.excludedSites.includes(new URL(activeTab.url).hostname);
+    $('refresh-page').disabled = !available;
+    $('refresh-page').title = available ? '重新翻译当前页' : '开启连接、本站翻译和译文阅读后可用';
+  }
+  for (const id of busyControls) if ($(id)) $(id).disabled = true;
 }
 
 function selected() {
@@ -73,8 +107,11 @@ function renderState() {
   const draft = modelDirty && getProfile($('model').value, s.customProfiles) ? selected() : null;
   $('connection-status').textContent = s.hasKey ? '连接已配置' : '未配置连接';
   $('connection-status').classList.toggle('ready', s.hasKey);
+  $('setup-prompt').hidden = s.hasKey;
   $('automatic').checked = s.automatic;
   if ($('display-mode')) $('display-mode').value = s.displayMode || 'translated';
+  $('reading-hint').textContent = s.displayMode === 'original' ? '暂停新的翻译请求，随时切回译文。' : s.displayMode === 'bilingual' ? '原文与译文对照阅读，页面高度会随内容增加。' : '保留网页结构，复杂排版会保留原文对照。';
+  if ($('site-enabled') && /^https?:/.test(activeTab?.url || '')) $('site-enabled').checked = !s.excludedSites.includes(new URL(activeTab.url).hostname);
   renderModelOptions(draft?.modelId || s.selection.modelId);
   renderControls(draft || s.selection);
   const label = `${getProfile(s.selection.modelId, s.customProfiles)?.name || s.selection.modelId} · ${selectionLabel(s.selection)}`;
@@ -89,7 +126,7 @@ function renderState() {
     $('stat-cache').textContent = state.stats.cacheHits;
 
   }
-
+  renderActionState();
 }
 
 async function refresh() { state = await call({ type: 'GET_STATE' }); renderState(); }
@@ -101,18 +138,20 @@ for (const tab of document.querySelectorAll('[data-tab]')) tab.addEventListener(
 });
 
 $('model').addEventListener('change', () => {
-  modelDirty = true; $('apply-model').querySelector('span').textContent='应用模型';
+  modelDirty = true;
   const id = $('model').value;
   renderControls(state.settings.modelPreferences[id] || defaultSelection(getProfile(id, state.settings.customProfiles)));
+  renderActionState();
 });
 $('thinking').addEventListener('change', () => {
-  modelDirty = true; $('apply-model').querySelector('span').textContent='应用模型';
+  modelDirty = true;
   const p = getProfile($('model').value, state.settings.customProfiles);
   $('effort-row').hidden = !p.efforts.length || p.mode === 'toggle-effort' && !$('thinking').checked;
   if(document.body.dataset.surface==='popup' && !$('effort-row').hidden) $('effort-row').scrollIntoView({block:'nearest'});
+  renderActionState();
 });
-$('effort').addEventListener('change', () => { modelDirty = true; $('apply-model').querySelector('span').textContent='应用模型'; });
-for (const id of ['endpoint', 'api-key', 'connection-kind']) $(id)?.addEventListener('input', () => { connectionDirty = true; });
+$('effort').addEventListener('change', () => { modelDirty = true; renderActionState(); });
+for (const id of ['endpoint', 'api-key', 'connection-kind']) $(id)?.addEventListener('input', () => { connectionDirty = true; renderActionState(); });
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local' || !changes.settings || !state) return;
   const draft = modelDirty ? selected() : null;
@@ -122,41 +161,49 @@ chrome.storage.onChanged.addListener((changes, area) => {
   renderState();
   if (draft) { renderModelOptions(draft.modelId); renderControls(draft); }
   if (connection) { $('endpoint').value = connection.endpoint; $('connection-kind').value = connection.kind; }
+  renderActionState();
 });
 $('apply-model').addEventListener('click', () => action($('apply-model'), async () => {
   const result = await call({ type: 'SELECT_MODEL', selection: selected(), expectedRevision: state.settings.revision });
   modelDirty = false; state.settings = result.settings; renderState(); notice(state.settings.hasKey ? '已切换，当前页正在更新译文' : '模型已保存，连接尚未配置');
-}));
+}, { label: '验证并应用中…', controls: ['model-search', 'model', 'thinking', 'effort'] }));
 $('automatic').addEventListener('change', async () => {
   try { const result = await call({ type: 'SET_AUTOMATIC', value: $('automatic').checked, expectedRevision: state.settings.revision }); state.settings = result.settings; renderState(); }
   catch (e) { notice(e.message, true); await refresh(); }
 });
 $('display-mode')?.addEventListener('change', async () => {
-  try { const result = await call({ type: 'SET_DISPLAY_MODE', mode: $('display-mode').value, expectedPresentationRevision: state.settings.presentationRevision || 1 }); state.settings=result.settings; notice('显示方式已更新'); }
+  try { const result = await call({ type: 'SET_DISPLAY_MODE', mode: $('display-mode').value, expectedPresentationRevision: state.settings.presentationRevision || 1 }); state.settings=result.settings; renderState(); notice('显示方式已更新'); }
   catch(e) { notice(e.message,true); await refresh(); }
 });
 $('open-settings')?.addEventListener('click', () => chrome.runtime.openOptionsPage());
+$('configure-connection').addEventListener('click', () => {
+  if (document.body.dataset.surface === 'popup') void chrome.tabs.create({ url: chrome.runtime.getURL('options.html#connection') });
+  else { document.querySelector('[data-tab="connection"]').click(); $('endpoint').focus(); }
+});
 $('refresh-page')?.addEventListener('click', () => action($('refresh-page'), async () => {
   if (!activeTab?.id) throw new Error('当前页不可翻译');
-  await chrome.tabs.sendMessage(activeTab.id, { type: 'RETRANSLATE' }); notice('正在更新译文');
+  try { await chrome.tabs.sendMessage(activeTab.id, { type: 'RETRANSLATE' }); notice('正在更新译文'); }
+  catch { throw new Error('页面尚未连接清译，请刷新网页后重试'); }
 }));
 $('original')?.addEventListener('change', async () => {
   if (activeTab?.id) await chrome.tabs.sendMessage(activeTab.id, { type: 'SHOW_ORIGINAL', value: $('original').checked }).catch(() => notice('当前页不可翻译', true));
 });
 $('site-enabled')?.addEventListener('change', async () => {
+  $('site-enabled').disabled = true;
   try { const result = await call({ type: 'TOGGLE_SITE', url: activeTab.url, expectedRevision: state.settings.revision }); state.settings = result.settings; renderState(); }
-  catch (e) { notice(e.message, true); }
+  catch (e) { notice(e.message, true); await refresh(); }
+  finally { $('site-enabled').disabled = false; }
 });
 $('save-connection')?.addEventListener('click', () => action($('save-connection'), async () => {
   const result = await call({ type: 'SAVE_CONNECTION', endpoint: $('endpoint').value, apiKey: $('api-key').value,
     connectionKind: $('connection-kind').value, expectedRevision: state.settings.revision });
   connectionDirty = false; $('api-key').value = ''; state.settings = result.settings; renderState(); notice('连接已保存');
-}));
+}, { label: '保存中…', controls: ['endpoint', 'api-key', 'connection-kind', 'test-connection'] }));
 $('test-connection')?.addEventListener('click', () => action($('test-connection'), async () => {
   const result = await call({ type: 'TEST_MODEL', selection: state.settings.selection,
     text: 'Changes are saved only after validation succeeds.' });
   notice(`${result.synthetic ? '测试网关通过' : '翻译通过'} · ${result.elapsedMs} ms`);
-}));
+}, { label: '测试连接中…', controls: ['endpoint', 'api-key', 'connection-kind', 'save-connection'] }));
 $('add-model')?.addEventListener('click', () => action($('add-model'), async () => {
   const result = await call({ type: 'ADD_MODEL', profile: { id: $('custom-id').value, name: $('custom-name').value }, expectedRevision: state.settings.revision });
   state.settings = result.settings; state.profiles = availableProfiles(result.settings.customProfiles);
@@ -170,6 +217,7 @@ $('clear-connection')?.addEventListener('click', () => action($('clear-connectio
 
 try {
   await refresh();
+  if (location.hash === '#connection') { document.querySelector('[data-tab="connection"]')?.click(); $('endpoint')?.focus(); }
   // Optional one-shot, loopback-only receipt for a locally requested installation
   // check. Never transmit endpoint, key, page text, or browser-profile data.
   const params = new URLSearchParams(location.search);
@@ -185,5 +233,6 @@ try {
     [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
     try { const url = new URL(activeTab?.url); if(!/^https?:$/.test(url.protocol))throw new Error('UNSUPPORTED_PAGE');$('page-host').textContent = url.hostname; $('site-enabled').checked = !state.settings.excludedSites.includes(url.hostname); }
     catch { $('page-host').textContent = '当前页不可翻译'; $('site-enabled').disabled = true; $('refresh-page').disabled = true; }
+    renderActionState();
   }
 } catch (e) { notice(e.message || '扩展连接失败', true); }

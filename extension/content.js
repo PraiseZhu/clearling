@@ -1,6 +1,6 @@
 import { anchor, ownsView, disposeView, createView, renderRichText, present, isInteracting } from './content/presentation.mjs';
 import { ViewportSchedule } from './content/scheduler.mjs';
-import { BODY_SELECTOR, CANDIDATE_SELECTOR, OWN, EXCLUDED, siteFor, planElement, sourceHash, splitSource } from './content/planner.mjs';
+import { BODY_SELECTOR, CANDIDATE_SELECTOR, OWN, EXCLUDED, siteFor, planElement, sourceHash, splitSource, joinTranslations } from './content/planner.mjs';
 
 (() => {
   if (globalThis.__clearlingStarted) return;
@@ -70,8 +70,10 @@ import { BODY_SELECTOR, CANDIDATE_SELECTOR, OWN, EXCLUDED, siteFor, planElement,
     diagnostics.inspected++;
     if (!plan) { if (previous) remove(previous); return; }
     if (previous?.identity === plan.identity) {
+      const placementChanged = previous.placement !== plan.placement || previous.replaceable !== plan.replaceable;
       previous.placement = plan.placement;
-      if (previous.translation && !ownsPlacement(previous)) { disposeView(previous); previous.renderedRevision = 0; pending.add(previous); }
+      previous.replaceable = plan.replaceable;
+      if (previous.translation && (placementChanged || !ownsPlacement(previous))) { disposeView(previous); previous.renderedRevision = 0; pending.add(previous); }
       if (previous.translation) {
         const style=getComputedStyle(element);
         for(const key of ['fontSize','lineHeight','fontFamily','fontWeight','letterSpacing','color','textAlign'])previous.translation.style[key]=style[key];
@@ -181,9 +183,10 @@ import { BODY_SELECTOR, CANDIDATE_SELECTOR, OWN, EXCLUDED, siteFor, planElement,
     if (records.get(item.element) !== item || !item.element.isConnected) return;
     const plan=planElement(item.element,site);
     if(!plan || plan.identity!==item.identity){enqueue(item.element);return;}
-    item.placement=plan.placement;
+    if(item.placement!==plan.placement || item.replaceable!==plan.replaceable)disposeView(item);
+    item.placement=plan.placement;item.replaceable=plan.replaceable;
     if(isInteracting(item)){schedulePump(200);return;}
-    const content=renderRichText(item,item.results.join(''));
+    const content=renderRichText(item,joinTranslations(item.chunks,item.results));
     const readingAnchor=[...records.values()].find(record=>{const rect=anchor(record).getBoundingClientRect();return rect.top>=0 && rect.top<innerHeight;});
     const before=readingAnchor?anchor(readingAnchor).getBoundingClientRect().top:0;
     view(item,'ready',content);
@@ -195,7 +198,7 @@ import { BODY_SELECTOR, CANDIDATE_SELECTOR, OWN, EXCLUDED, siteFor, planElement,
     item.renderedRevision=revision;item.failures=0;pending.delete(item);diagnostics.rendered++;
   }
   async function pump() {
-    if (!enabled() || disconnected || document.hidden) return;
+    if (!enabled() || mode() === 'original' || disconnected || document.hidden) return;
     if(mode()==='translated')for(const item of pending)if(!item.translation && item.element.isConnected && Number.isFinite(priority(item)) && !isInteracting(item))view(item,'pending');
     if(busy>=8)return;
     const now = Date.now();
@@ -296,8 +299,8 @@ import { BODY_SELECTOR, CANDIDATE_SELECTOR, OWN, EXCLUDED, siteFor, planElement,
   chrome.runtime.onMessage.addListener((message, sender, reply) => {
     if (sender.id !== chrome.runtime.id) return;
     if (message.type === 'CONFIG_CHANGED') { apply(message.settings); reply({ ok: true }); }
-    if(message.type==='PRESENTATION_CHANGED'){if(settings){settings.displayMode=message.mode;settings.presentationRevision=message.presentationRevision;}for(const item of records.values()){item.showOriginal=false;if(item.translation)display(item,mode());}reply({ok:true});}
-    if (message.type === 'SHOW_ORIGINAL') { originalOnly = Boolean(message.value); for (const item of records.values()) if (item.translation) display(item,mode()); reply({ ok: true }); }
+    if(message.type==='PRESENTATION_CHANGED'){if(settings){settings.displayMode=message.mode;settings.presentationRevision=message.presentationRevision;}for(const item of records.values()){item.showOriginal=false;if(item.translation)display(item,mode());}schedulePump();reply({ok:true});}
+    if (message.type === 'SHOW_ORIGINAL') { originalOnly = Boolean(message.value); for (const item of records.values()) if (item.translation) display(item,mode()); schedulePump(); reply({ ok: true }); }
     if (message.type === 'RETRANSLATE') { for (const item of records.values()) { item.results = []; item.renderedRevision = 0; item.failures = 0; item.retryAt = 0; pending.add(item); enqueue(item.element); } schedulePump(); reply({ ok: true }); }
     if (message.type === 'GET_DIAGNOSTICS') reply({ ok: true, site, version: chrome.runtime.getManifest().version, records: records.size, pending: pending.size, busy, ...diagnostics });
   });
