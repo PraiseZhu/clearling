@@ -7,6 +7,12 @@ with thinking disabled. Model selection now includes 19 presets with search and 
 comparison workspace and result export have been removed. Popup and settings
 use the same black surfaces, controls and typography in every OS theme.
 
+The current source refines that interface with neutral black-and-white surfaces,
+clear connection setup, visible unsaved changes and progress during validation.
+Connection tests require saving the form first; model controls stay locked while
+their selection is being validated. Site controls follow changes from other
+extension windows.
+
 ## Build
 
 Node 24 or later. Run `npm install`, `npm test`, and `npm run build`. The
@@ -70,10 +76,10 @@ Real installation requires Chrome/Ego to load the MV3 manifest, run its worker
 and automatically inject its isolated content script. Merely injecting a
 JavaScript file is not installation evidence.
 
-Version 0.4.0 passes 33 Node tests, 11 reading checks and nine UI checks in
-each browser. The 0.3 reading engine previously passed 16 presentation checks
-in each browser (`scripts/verify-reading.mjs`,
-`scripts/verify-presentation.mjs`, corresponding JSON reports in `artifacts/`).
+The source has 37 Node tests. Browser checks run through
+`scripts/verify-reading.mjs`, `scripts/verify-ui.mjs`,
+`scripts/verify-presentation.mjs` and `scripts/verify-layout.mjs`, with JSON
+reports and UI screenshots in the ignored `artifacts/` directory.
 Browser regressions use a synthetic provider and isolated profiles. They cover
 X replies, short replies, layout geometry, inline code, editors, dynamic and
 recycled nodes, caching, narrow screens, and transport-disconnection recovery.
@@ -90,10 +96,39 @@ Unsafe mixed containers retain their original controls and content. Image text,
 video, scanned PDF, closed Shadow DOM and browser-restricted pages are not
 covered by this DOM translator.
 
+Grid items, flex items with custom sizing, decorated text boxes, table cells and
+paragraphs containing media retain their source container and show the translation
+inside it. The translation does not contribute to the container's intrinsic width.
+Clipped containers requiring this fallback retain the original instead of adding
+an unreadable translation. Ordinary paragraphs still support translation-only
+replacement. Bilingual content and this conservative fallback can increase page
+height; arbitrary websites are not guaranteed to retain identical geometry.
+
+Dynamic controls trigger placement re-evaluation without replacing their event
+listeners. Protected link/formatting tokens must remain in order before results
+can be cached, and paragraph breaks remain distinct in cache keys and between
+translation chunks. The cache namespace changed, so older entries are not reused;
+the first revisit can require a new request.
+
 Viewport priority, bounded directional prefetch, shared paragraph requests
 and incremental cache replies reduce avoidable waiting. Already-dispatched
 valid work can finish and warm the cache after scrolling; queued distant work
-is cancelled. Presentation changes do not invalidate translation requests.
+is cancelled. Cancelled members of a shared batch can safely subscribe again.
+Original-only reading pauses new paragraph requests until translated or bilingual
+reading resumes. Presentation changes do not invalidate translation results.
+
+To validate a change without overwriting an everyday installation's `dist/`:
+
+```sh
+CLEARLING_BUILD_DIR=artifacts/build-review npm run build
+CLEARLING_BUILD_DIR=artifacts/build-review node scripts/verify-browser.mjs chrome
+CLEARLING_BUILD_DIR=artifacts/build-review node scripts/verify-presentation.mjs chrome
+CLEARLING_BUILD_DIR=artifacts/build-review node scripts/verify-layout.mjs chrome
+```
+
+Repeat the browser commands with `ego` for Ego Lite. These commands use isolated
+QA profiles and a synthetic provider; they do not establish real model quality or
+gateway speed.
 
 `scripts/benchmark-reading.mjs` runs slow/fast/jump traces with cold/revisited
 cache states in isolated profiles. Reports explicitly distinguish completed

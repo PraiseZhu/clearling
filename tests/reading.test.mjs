@@ -103,3 +103,67 @@ test('different callers reusing a local ID receive distinct wire IDs in a shared
   const results=await Promise.all([service.translate(config,[block],ctx),service.translate(config,[{...block,text:'A different paragraph from another tab.'}],ctx)]);
   assert.equal(new Set(ids).size,2);assert.equal(results[0][0].id,'b1');assert.equal(results[1][0].id,'b1');
 });
+
+test('cancelled batch member can resubscribe after its peer is dispatched', { timeout: 2000 }, async () => {
+  let releasePeer, peerStarted;
+  const started = new Promise(resolve => { peerStarted = resolve; });
+  const service = new TranslationService({ get: async () => null, put: async () => {} });
+  const calls = [];
+  const peer = { id: 'peer', text: 'A different surviving paragraph.' };
+  const context = { hostname: 'example.org', revision: 1, isCurrent: () => true, dispatch: async blocks => {
+    calls.push(blocks.map(b => b.text));
+    if (blocks.some(b => b.text === peer.text)) { peerStarted(); await new Promise(resolve => { releasePeer = resolve; }); }
+    return { translations: blocks.map(b => ({ id: b.id, text: '已完成。' })) };
+  } };
+  const controller = new AbortController();
+  const first = service.translate(config, [block], { ...context, signal: controller.signal });
+  const cancelled = assert.rejects(first, /CANCELLED/);
+  const second = service.translate(config, [peer], context);
+  while (service.inflight.size < 2) await new Promise(resolve => setImmediate(resolve));
+  assert.equal(service.batches.size, 1, 'both paragraphs must share a pending batch');
+  controller.abort();
+  await cancelled;
+  await started;
+  const retry = service.translate(config, [{ ...block, id: 'retry' }], context);
+  // Keep the survivor in flight until hashing/cache lookup has completed and
+  // the retry has actually subscribed; otherwise the old bug can be missed.
+  while (![...service.inflight.values()].some(entry => entry.block.text === block.text && entry.consumers.size)) await new Promise(resolve => setImmediate(resolve));
+  releasePeer();
+  const [survivor, retried] = await Promise.all([second, retry]);
+  assert.equal(survivor[0].id, 'peer');
+  assert.equal(retried[0].id, 'retry');
+  assert.deepEqual(calls, [[peer.text], [block.text]]);
+  assert.equal(service.inflight.size, 0);
+});
+
+test('protected links reject reordered, duplicate and missing tokens before caching', () => {
+  const source = [{ id: 'link', text: 'Open ⟦CLR0_0⟧the ⟦CLR0_1⟧docs⟦CLR0_2⟧⟦CLR0_3⟧.' }];
+  const parse = text => parseTranslations(JSON.stringify({ translations: [{ id: 'link', text }] }), source);
+  for (const text of [
+    '打开 ⟦CLR0_3⟧文档 ⟦CLR0_0⟧⟦CLR0_1⟧⟦CLR0_2⟧。',
+    '打开 ⟦CLR0_0⟧⟦CLR0_1⟧文档 ⟦CLR0_2⟧⟦CLR0_3⟧⟦CLR0_3⟧。',
+    '打开 ⟦CLR0_0⟧⟦CLR0_1⟧文档 ⟦CLR0_2⟧。'
+  ]) assert.throws(() => parse(text), /RESPONSE_INCOMPLETE/);
+  assert.equal(parse('打开 ⟦CLR0_0⟧⟦CLR0_1⟧文档⟦CLR0_2⟧⟦CLR0_3⟧。').length, 1);
+});
+
+test('cache isolates paragraph breaks and old validation results', async () => {
+  const { cacheKey, digest, fingerprint } = await import('../extension/shared/core.mjs');
+  const paragraph = { ...block, text: 'First line.\n\nSecond line.' };
+  const flat = { ...block, text: 'First line. Second line.' };
+  assert.notEqual(await cacheKey(config, paragraph, 'example.org'), await cacheKey(config, flat, 'example.org'));
+  const oldKey = await digest(JSON.stringify([fingerprint(config), 'example.org', '', paragraph.text.replace(/\s+/g, ' ').trim()]));
+  assert.notEqual(await cacheKey(config, paragraph, 'example.org'), oldKey);
+});
+
+test('chunk reassembly restores paragraph boundaries trimmed by provider transport', async () => {
+  const { joinTranslations } = await import('../extension/content/planner.mjs');
+  const source = 'A public sentence. '.repeat(90).trim() + '\n\n' + 'The next paragraph. '.repeat(20);
+  const chunks = splitSource(source);
+  assert.ok(chunks.length > 1);
+  const { validateBlocks } = await import('../extension/shared/core.mjs');
+  const transmitted = validateBlocks(chunks.map((text, index) => ({ id: `p${index}`, text })));
+  const joined = joinTranslations(chunks, transmitted.map(b => b.text));
+  assert.equal((joined.match(/\n/g) || []).length, 2);
+  assert.equal(joinTranslations(['First.\n', '\nSecond.'], ['第一段。', '第二段。']), '第一段。\n\n第二段。');
+});

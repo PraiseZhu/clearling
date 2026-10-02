@@ -19,6 +19,9 @@ export class TranslationService {
     const priority=()=>Math.min(...entries.flatMap(e=>[...e.consumers].map(c=>c.priority())),Infinity);
     try {
       valid();const active=entries.filter(e=>e.consumers.size);
+      // Excluded entries will never receive this batch's response. A later
+      // reader must create new work instead of subscribing to an orphan.
+      for(const entry of entries)if(!entry.consumers.size && this.inflight.get(entry.requestKey)===entry)this.inflight.delete(entry.requestKey);
       const notifyDispatch=()=>{group.dispatched=true;for(const entry of active)for(const consumer of entry.consumers)consumer.onDispatch?.();};
       const response=await context.dispatch(active.map(e=>e.block),valid,group.controller.signal,priority,notifyDispatch);
       valid();
