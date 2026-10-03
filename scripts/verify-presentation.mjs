@@ -13,6 +13,7 @@ try {
  options=await cdp.page(`chrome-extension://${id}/options.html`,{hidden:false});await cdp.wait(options,'!!document.querySelector("#model")?.options.length');
  const rpc=m=>cdp.evaluate(options,`chrome.runtime.sendMessage(${JSON.stringify(m)})`,true);
  let state=await rpc({type:'GET_STATE'});assert.equal(state.settings.hasKey,false);assert.equal(state.settings.displayMode,'translated');
+ state=await rpc({type:'SET_READING_ENGINE',engine:'ai',expectedRevision:state.settings.revision});
  state=await rpc({type:'SAVE_CONNECTION',endpoint:line.url,apiKey:'fixture',connectionKind:'cindy',expectedRevision:state.settings.revision});
  const page=await cdp.page(`${line.url}/x-thread`,{hidden:false});
  const ready=selector=>`(()=>{const e=document.querySelector(${JSON.stringify(selector)});return (e?.querySelector(':scope > [data-clearling=translation]') || e?.nextElementSibling)?.dataset.phase==='ready'})()`;

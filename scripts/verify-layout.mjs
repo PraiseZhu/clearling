@@ -37,6 +37,7 @@ try {
   })()`);
   const geometry = selector => cdp.evaluate(page, `(() => { const e=document.querySelector(${JSON.stringify(selector)}),r=e.getBoundingClientRect(),s=getComputedStyle(e); return {x:r.x,width:r.width,padding:s.padding,border:s.border,background:s.backgroundColor,order:s.order,gridColumn:s.gridColumn,display:s.display}; })()`);
   const before = Object.fromEntries(await Promise.all(['#grid', '#flex', '#box', '#diagram', '#cell'].map(async selector => [selector, await geometry(selector)])));
+  state = await rpc({ type: 'SET_READING_ENGINE', engine: 'ai', expectedRevision: state.settings.revision });
   state = await rpc({ type: 'SAVE_CONNECTION', endpoint: fixture.url, apiKey: 'fixture', connectionKind: 'cindy', expectedRevision: state.settings.revision });
   assert.equal(state.ok, true);
   const projection = selector => `(() => {const e=document.querySelector(${JSON.stringify(selector)});return e?.querySelector(':scope > [data-clearling=translation]') || (e?.nextElementSibling?.matches('[data-clearling=translation]') ? e.nextElementSibling : null)})()`;

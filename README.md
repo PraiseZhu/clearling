@@ -1,11 +1,13 @@
 # 清译 · Clearling
 
 Chromium Manifest V3 extension for automatic Simplified Chinese translation.
-Version 0.4 defaults to translation-only reading, with bilingual and original
-modes available in the popup and settings. The default model is MiMo V2.6 Flash
-with thinking disabled. Model selection now includes 19 presets with search and family grouping. The
-comparison workspace and result export have been removed. Popup and settings
-use the same black surfaces, controls and typography in every OS theme.
+Version 0.5 starts new installations in Microsoft fast translation mode, without
+requiring a gateway or API key. AI precision mode keeps the 19 model presets,
+connection settings and model preferences. Older installations retain their AI
+selection until the reading engine is explicitly changed. Waiting and failed
+translations keep the original readable; translation-only replacement happens
+only when a valid translation is ready. Fast and AI results use separate cache
+identities, while existing AI cache identities remain valid.
 
 The current source refines that interface with neutral black-and-white surfaces,
 clear connection setup, visible unsaved changes and progress during validation.
@@ -56,7 +58,7 @@ Model availability and thinking behavior must be verified with the actual
 gateway. GLM 5.3 Flash cannot disable native thinking. Qwen's native protocol
 uses enable_thinking, while Cindy's documented adapter uses thinking.type.
 
-Version 0.4.0 is supplied as a ZIP package. To update an existing unpacked
+Version 0.5.0 is supplied as a ZIP package. To update an existing unpacked
 installation while retaining its settings, replace files in the existing loaded
 directory and reload the extension; refresh existing webpages afterward. Avoid
 running two Clearling copies on the same page.
@@ -76,7 +78,7 @@ Real installation requires Chrome/Ego to load the MV3 manifest, run its worker
 and automatically inject its isolated content script. Merely injecting a
 JavaScript file is not installation evidence.
 
-The source has 37 Node tests. Browser checks run through
+The source has 45 Node tests. Browser checks run through
 `scripts/verify-reading.mjs`, `scripts/verify-ui.mjs`,
 `scripts/verify-presentation.mjs` and `scripts/verify-layout.mjs`, with JSON
 reports and UI screenshots in the ignored `artifacts/` directory.
@@ -142,3 +144,29 @@ has been completed; this release does not claim proven superiority over it.
 
 Tool icons and the raster extension glyph derive from Lucide 0.468.0 (ISC).
 Bundled dependencies retain their license notices. No remote scripts are used.
+
+## Fast Translation Validation and Daily Updates
+
+`node scripts/verify-fast.mjs chrome` and the equivalent `ego` command use a
+synthetic Microsoft-shaped provider in an isolated MV3 profile. They verify
+no-key dispatch, readable pending/failure states, protected links/code, caching,
+and AI/fast switching. Add `--live` for three defined public samples against the
+real Microsoft service; real results are marked separately. These checks do not
+establish a universal translation-quality or speed ranking. The fast endpoint
+is a browser translation interface, and availability can change; failures keep
+the original visible and do not silently use the paid AI connection.
+
+`node scripts/verify-upgrade.mjs chrome` (or `ego`) checks 0.4.0 → current,
+including the saved model, reading mode, automatic switch and authenticated
+synthetic gateway connection.
+
+After building the approved release in an existing loaded directory, run
+`node scripts/update-installed.mjs chrome --activate-fast` or
+`node scripts/update-installed.mjs ego --activate-fast`. The updater verifies
+the existing extension ID/version through a one-time loopback handshake,
+selects fast reading through the extension's normal API, preserves the AI
+connection/model, and opens a defined public translation sample when reading
+is enabled. It does not write browser preferences or copy credentials. Existing
+webpages need a refresh to receive the updated content script. This updater
+requires an already enabled installation; first installation still uses the
+browser's supported Load Unpacked flow.

@@ -6,7 +6,8 @@ export class TranslationService {
   enqueue(entry,config,context) {
     const batchKey=JSON.stringify([fingerprint(config),context.revision,Boolean(context.private),(context.priority?.()??0)>=10000,entry.block.text.length>900]);
     let group=this.batches.get(batchKey);
-    if(!group || group.controller.signal.aborted || group.entries.length>=2 || group.size+entry.block.text.length>3600) {
+    const limit = config.engine === 'bing' ? 50 : 2, sizeLimit = config.engine === 'bing' ? 1800 : 3600;
+    if(!group || group.controller.signal.aborted || group.entries.length>=limit || group.size+entry.block.text.length>sizeLimit) {
       group={entries:[],size:0,controller:new AbortController(),context};
       this.batches.set(batchKey,group);
       setTimeout(()=>{if(this.batches.get(batchKey)===group)this.batches.delete(batchKey);void this.dispatch(group);},8);

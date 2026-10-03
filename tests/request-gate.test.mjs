@@ -4,7 +4,7 @@ import { RequestGate } from '../extension/background/request-gate.mjs';
 import { requestTranslation } from '../extension/background/provider.mjs';
 import { effectiveConfig, initialSettings } from '../extension/shared/core.mjs';
 
-const config = effectiveConfig({ ...initialSettings(), endpoint: 'https://example.com' });
+const config = effectiveConfig({ ...initialSettings(), readingEngine: 'ai', endpoint: 'https://example.com' });
 test('401 pauses future dispatch until explicit connection test', async () => {
   const gate = new RequestGate({ intervalMs: 0 }); let calls = 0;
   const fail = async () => { calls++; throw new Error('HTTP_401'); };
