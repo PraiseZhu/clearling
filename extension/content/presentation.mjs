@@ -68,7 +68,7 @@ export function present(item, mode, phase = item.phase || 'pending', content = n
       const original = document.createElement('button'); original.type='button'; original.textContent='查看原文'; original.onclick = e => { e.preventDefault(); e.stopPropagation(); item.onOriginal(); };
       node.replaceChildren(status, original);
       if (phase === 'failed') { const retry=document.createElement('button');retry.type='button';retry.textContent='重试';retry.onclick=e=>{e.preventDefault();e.stopPropagation();item.onRetry();};node.append(retry); }
-      node.style.minHeight = phase === 'pending' && item.replaceable ? `${item.placeholderHeight}px` : '';
+      node.style.minHeight = '';
     }
   }
   item.phase = phase; node.dataset.phase = phase;
@@ -77,7 +77,7 @@ export function present(item, mode, phase = item.phase || 'pending', content = n
   node.style.contain = item.placement === 'inside' || node.dataset.inside === 'true' ? 'inline-size' : '';
   const original = mode === 'original' || item.showOriginal || isInteracting(item);
   node.hidden = original || (mode === 'bilingual' && phase === 'pending');
-  const hideSource = !original && mode === 'translated' && item.replaceable;
+  const hideSource = !original && phase === 'ready' && mode === 'translated' && item.replaceable;
   item.element.toggleAttribute('data-cl-source', hideSource);
   node.style.setProperty('margin-top', hideSource ? item.sourceMargins.top : '.35em', 'important');
   node.style.setProperty('margin-bottom', hideSource ? item.sourceMargins.bottom : '0', 'important');

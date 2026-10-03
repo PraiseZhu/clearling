@@ -1,17 +1,22 @@
 import { ADAPTER_VERSION, PROMPT_VERSION, defaultSelection, modelParameters, validateSelection, wireModel } from './profiles.mjs';
 
+export const FAST_ENDPOINT = 'https://edge.microsoft.com/translate/translatetext';
+export const readingEngine = settings => settings.readingEngine || 'ai';
+export const translationReady = settings => readingEngine(settings) === 'bing' || Boolean(settings.hasKey ?? settings.apiKey);
+export const readingModelId = config => config.engine === 'bing' ? 'microsoft-edge' : config.selection.modelId;
+
 export function initialSettings() {
   return {
     schemaVersion: 1, revision: 1, connectionRevision: 1, connectionId: crypto.randomUUID(),
     endpoint: '', apiKey: '', connectionKind: 'cindy', automatic: true, excludedSites: [],
     selection: defaultSelection(), modelPreferences: {}, customProfiles: [], cacheDays: 30,
-    verification: {}, displayMode: 'translated', presentationRevision: 1, updatedAt: Date.now()
+    verification: {}, readingEngine: 'bing', displayMode: 'translated', presentationRevision: 1, updatedAt: Date.now()
   };
 }
 
 export function publicSettings(settings) {
   const { apiKey, ...safe } = settings;
-  return { displayMode: 'translated', presentationRevision: 1, ...safe, hasKey: Boolean(apiKey) };
+  return { displayMode: 'translated', presentationRevision: 1, ...safe, readingEngine: readingEngine(settings), hasKey: Boolean(apiKey) };
 }
 
 export function normalizeEndpoint(value) {
@@ -26,7 +31,11 @@ export function normalizeEndpoint(value) {
 }
 
 export function effectiveConfig(settings, override = null) {
+  if (!override && readingEngine(settings) === 'bing') return {
+    engine: 'bing', endpoint: FAST_ENDPOINT, sourceLanguage: 'auto', targetLanguage: 'zh-CN', adapterVersion: 'edge-list-1'
+  };
   return {
+    engine: 'ai',
     endpoint: normalizeEndpoint(settings.endpoint), connectionId: settings.connectionId,
     connectionRevision: settings.connectionRevision, connectionKind: settings.connectionKind,
     selection: validateSelection(override ?? settings.selection, settings.customProfiles),
@@ -36,6 +45,8 @@ export function effectiveConfig(settings, override = null) {
 }
 
 export function fingerprint(config) {
+  if (config.engine === 'bing') return JSON.stringify({ engine: 'bing', endpoint: config.endpoint,
+    sourceLanguage: config.sourceLanguage, targetLanguage: config.targetLanguage, adapterVersion: config.adapterVersion });
   return JSON.stringify({
     endpoint: config.endpoint, connectionId: config.connectionId, connectionRevision: config.connectionRevision,
     model: config.selection.modelId, parameters: config.parameters, targetLanguage: config.targetLanguage,

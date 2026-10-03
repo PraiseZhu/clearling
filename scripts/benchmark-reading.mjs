@@ -13,6 +13,7 @@ try {
  const id=await loadCurrentExtension(cdp,extension);options=await cdp.page(`chrome-extension://${id}/options.html`,{hidden:false});await cdp.wait(options,'document.querySelector("#model")?.options.length>0');
  const rpc=m=>cdp.evaluate(options,`chrome.runtime.sendMessage(${JSON.stringify(m)})`,true);
  let state=await rpc({type:'GET_STATE'});if(state.settings.hasKey)throw new Error('QA_PROFILE_HAS_EXISTING_CONNECTION');
+ state=await rpc({type:'SET_READING_ENGINE',engine:'ai',expectedRevision:state.settings.revision});
  state=await rpc({type:'SAVE_CONNECTION',endpoint:origin,apiKey:'fixture',connectionKind:'cindy',expectedRevision:state.settings.revision});
  // Both old and new use bilingual for the self-baseline comparison; old has no pure mode.
  if(state.settings.displayMode)state=await rpc({type:'SET_DISPLAY_MODE',mode:'bilingual',expectedPresentationRevision:state.settings.presentationRevision});

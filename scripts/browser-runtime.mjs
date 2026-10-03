@@ -73,7 +73,7 @@ export class CDP {
   async wait(page, expression, timeout = 15000) {
     const deadline = Date.now() + timeout;
     while (Date.now() < deadline) {
-      if (await this.evaluate(page, expression)) return;
+      if (await this.evaluate(page, expression, true)) return;
       await new Promise(resolve => setTimeout(resolve, 150));
     }
     throw new Error('PAGE_WAIT_TIMEOUT');

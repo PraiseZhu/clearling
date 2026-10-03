@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { effectiveConfig, initialSettings, safeError } from '../extension/shared/core.mjs';
 import { requestTranslation } from '../extension/background/provider.mjs';
 
-const config = effectiveConfig({ ...initialSettings(), endpoint: 'https://example.com' });
+const config = effectiveConfig({ ...initialSettings(), readingEngine: 'ai', endpoint: 'https://example.com' });
 const blocks = [{ id: 'first', text: 'Existing settings remain active.', sourceHash: 'public-sample' }];
 
 test('provider uses private header and validates JSON translation contract', async () => {

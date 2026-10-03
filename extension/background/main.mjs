@@ -1,7 +1,7 @@
 import { availableProfiles, defaultSelection, getProfile, validateCustomProfile, validateSelection } from '../shared/profiles.mjs';
-import { effectiveConfig, fingerprint, initialSettings, publicSettings, safeError, validateBlocks } from '../shared/core.mjs';
+import { effectiveConfig, fingerprint, initialSettings, publicSettings, readingEngine, readingModelId, translationReady, safeError, validateBlocks } from '../shared/core.mjs';
 import { TranslationCache } from './cache.mjs';
-import { requestTranslation } from './provider.mjs';
+import { requestTranslation, requestMachineTranslation } from './provider.mjs';
 import { RequestGate } from './request-gate.mjs';
 import { TranslationService } from './translation-service.mjs';
 
@@ -35,7 +35,7 @@ async function broadcast() {
   for (const c of controllers) c.abort();
   const tabs = await chrome.tabs.query({});
   await Promise.allSettled(tabs.map(t => chrome.tabs.sendMessage(t.id, { type: 'CONFIG_CHANGED', settings: publicSettings(settings) })));
-  await chrome.action.setBadgeText({ text: settings.apiKey ? '' : '?' });
+  await chrome.action.setBadgeText({ text: translationReady(settings) ? '' : '?' });
   await chrome.action.setBadgeBackgroundColor({ color: '#a94a40' });
 }
 
@@ -62,13 +62,13 @@ async function execute(config, key, blocks, c, beforeDispatch = () => {}, priori
   return requestGate.run(config, async () => {
     beforeDispatch();
     stats.apiCalls++;
-    return requestTranslation(config, key, blocks, { signal: c.signal });
+    return config.engine === 'bing' ? requestMachineTranslation(config, blocks, { signal: c.signal }) : requestTranslation(config, key, blocks, { signal: c.signal });
   }, c.signal, priority);
 }
 
 async function translate(message, sender, progress = {}) {
   if (!sender.tab || !/^https?:/.test(sender.url || '')) throw new Error('FORBIDDEN');
-  requireConnection();
+  if (readingEngine(settings) === 'ai') requireConnection();
   if (!settings.automatic || message.revision !== settings.revision) throw new Error('CONFIG_CHANGED');
   const hostname = new URL(sender.url).hostname;
   if (settings.excludedSites.includes(hostname)) throw new Error('FORBIDDEN');
@@ -92,7 +92,7 @@ async function translate(message, sender, progress = {}) {
   });
   if (revision !== settings.revision) throw new Error('CONFIG_CHANGED');
   stats.translated += result.length;
-  return { translations: result, revision, modelId: config.selection.modelId, fingerprint: fingerprint(config) };
+  return { translations: result, revision, modelId: readingModelId(config), fingerprint: fingerprint(config) };
 }
 
 async function route(message, sender) {
@@ -101,6 +101,15 @@ async function route(message, sender) {
   if (message.type === 'GET_STATE') return { settings: publicSettings(settings), profiles: availableProfiles(settings.customProfiles), stats };
   if (message.type === 'TRANSLATE') return translate(message, sender);
   if (!trusted(sender)) throw new Error('FORBIDDEN');
+  if (message.type === 'SET_READING_ENGINE') {
+    if (!['bing', 'ai'].includes(message.engine)) throw new Error('FORBIDDEN');
+    const candidate = { ...settings, readingEngine: message.engine };
+    // Choosing a previously paused engine is an explicit retry, without copying
+    // the other engine's credentials or changing its model selection.
+    const saved = await persist(candidate, message.expectedRevision);
+    if (message.engine === 'bing' || settings.endpoint && settings.apiKey) requestGate.resume(effectiveConfig(settings));
+    return { settings: saved };
+  }
   if (message.type === 'SET_DISPLAY_MODE') {
     if (!['translated', 'bilingual', 'original'].includes(message.mode)) throw new Error('FORBIDDEN');
     const operation = writeQueue.then(async () => {
@@ -116,7 +125,7 @@ async function route(message, sender) {
   if (message.type === 'SAVE_CONNECTION') {
     const candidate = structuredClone(settings);
     const endpoint = String(message.endpoint || '').trim();
-    effectiveConfig({ ...candidate, endpoint });
+    effectiveConfig({ ...candidate, endpoint }, candidate.selection);
     const key = String(message.apiKey || candidate.apiKey).trim();
     if (!key || key.length > 4096) throw new Error('KEY_REQUIRED');
     if (!['cindy', 'native'].includes(message.connectionKind)) throw new Error('FORBIDDEN');
@@ -136,7 +145,7 @@ async function route(message, sender) {
       const c = controller();
       try {
         const sample = [{ id: 'check', text: 'Changes are saved only after validation succeeds.', sourceHash: 'public-check', context: 'Software interface' }];
-        const config = effectiveConfig(candidate);
+        const config = effectiveConfig(candidate, selection);
         const check = await execute(config, candidate.apiKey, sample, c);
         if (!/[\u4e00-\u9fff]/.test(check.translations[0].text) || check.translations[0].text === sample[0].text) throw new Error('TRANSLATION_UNVERIFIED');
         candidate.verification[selection.modelId] = { state: check.synthetic ? 'synthetic_passed' : 'translation_passed', elapsedMs: check.elapsedMs, time: Date.now(), parameters: config.parameters };
@@ -164,7 +173,7 @@ async function route(message, sender) {
   }
   if (message.type === 'TEST_MODEL') {
     requireConnection();
-    const config = effectiveConfig(settings, message.selection);
+    const config = effectiveConfig(settings, message.selection || settings.selection);
     if (message.type === 'TEST_MODEL') requestGate.resume(config);
     const c = controller();
     const text = String(message.text || '');

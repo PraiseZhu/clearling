@@ -1,5 +1,6 @@
 import { anchor, ownsView, disposeView, createView, renderRichText, present, isInteracting } from './content/presentation.mjs';
 import { ViewportSchedule } from './content/scheduler.mjs';
+import { translationReady } from './shared/core.mjs';
 import { BODY_SELECTOR, CANDIDATE_SELECTOR, OWN, EXCLUDED, siteFor, planElement, sourceHash, splitSource, joinTranslations } from './content/planner.mjs';
 
 (() => {
@@ -55,7 +56,7 @@ import { BODY_SELECTOR, CANDIDATE_SELECTOR, OWN, EXCLUDED, siteFor, planElement,
     try { return await chrome.runtime.sendMessage(payload); }
     catch { return { ok: false, code: 'DISCONNECTED' }; }
   };
-  const enabled = () => settings?.automatic && settings.hasKey && !settings.excludedSites.includes(location.hostname);
+  const enabled = () => settings?.automatic && translationReady(settings) && !settings.excludedSites.includes(location.hostname);
   const schedulePump = (delay = 25) => {
     if (pumpTimer) return;
     pumpTimer = setTimeout(() => { pumpTimer = null; void pump(); }, delay);
@@ -213,6 +214,7 @@ import { BODY_SELECTOR, CANDIDATE_SELECTOR, OWN, EXCLUDED, siteFor, planElement,
       return;
     }
     const revision = settings.revision, runGeneration = generation;
+    const modelId = settings.readingEngine === 'bing' ? 'microsoft-edge' : settings.selection.modelId;
     const batch = [], inFlight = [], owners = new Set(); let size = 0;
     const limit = 1800;
     const firstRank=candidates[0][1];
@@ -222,7 +224,7 @@ import { BODY_SELECTOR, CANDIDATE_SELECTOR, OWN, EXCLUDED, siteFor, planElement,
     for (const [item, rank] of candidates) {
       if (batch.length >= 4 || size >= limit) break;
       if ((rank>=10000)!==(firstRank>=10000))break;
-      if (item.chunks.every((_, i) => Boolean(item.results[i]))) { render(item, revision, settings.selection.modelId); continue; }
+      if (item.chunks.every((_, i) => Boolean(item.results[i]))) { render(item, revision, modelId); continue; }
       for (let part = 0; part < item.chunks.length && batch.length < 4; part++) {
         if (item.results[part] != null) continue;
         if (batch.length && size + item.chunks[part].length > limit) break;
@@ -241,7 +243,7 @@ import { BODY_SELECTOR, CANDIDATE_SELECTOR, OWN, EXCLUDED, siteFor, planElement,
       const job=inFlight.find(j=>j.id===value.id);
       if(!job || records.get(job.item.element)!==job.item || job.item.hash!==job.hash || job.item.identity!==job.identity || !job.item.element.isConnected)return;
       job.item.results[job.part]=value.text;
-      if(job.item.chunks.every((_,i)=>Boolean(job.item.results[i])))try {render(job.item,revision,settings.selection.modelId);}catch {job.item.failures++;job.item.results=[];job.item.retryAt=Date.now()+1500;view(job.item,'failed');}
+      if(job.item.chunks.every((_,i)=>Boolean(job.item.results[i])))try {render(job.item,revision,modelId);}catch {job.item.failures++;job.item.results=[];job.item.retryAt=Date.now()+1500;view(job.item,'failed');}
     }, owners);
     busy--;
     for(const item of owners)if(item.flight===token)item.flight=null;

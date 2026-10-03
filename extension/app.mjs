@@ -1,6 +1,6 @@
 import { createIcons, Settings2, RefreshCw, Check, Plus, Save, PlugZap, Search, SlidersHorizontal } from 'lucide';
 import { CATALOG_DATE, availableProfiles, defaultSelection, getProfile, selectionLabel } from './shared/profiles.mjs';
-import { publicSettings } from './shared/core.mjs';
+import { publicSettings, translationReady } from './shared/core.mjs';
 
 // An unpacked installation can still have the previous manifest in memory after
 // its files are updated. Use Chrome's normal reload API before running new UI code.
@@ -60,7 +60,7 @@ function renderActionState() {
   if ($('thinking') && !busyControls.has('thinking')) $('thinking').disabled = getProfile($('model').value, state.settings.customProfiles)?.mode === 'required-effort';
   if ($('refresh-page') && !busyControls.has('refresh-page')) {
     const supported = /^https?:/.test(activeTab?.url || '');
-    const available = supported && state.settings.hasKey && state.settings.automatic && state.settings.displayMode !== 'original' && !state.settings.excludedSites.includes(new URL(activeTab.url).hostname);
+    const available = supported && translationReady(state.settings) && state.settings.automatic && state.settings.displayMode !== 'original' && !state.settings.excludedSites.includes(new URL(activeTab.url).hostname);
     $('refresh-page').disabled = !available;
     $('refresh-page').title = available ? '重新翻译当前页' : '开启连接、本站翻译和译文阅读后可用';
   }
@@ -105,16 +105,20 @@ $('model-search').addEventListener('input',()=>renderModelOptions());
 function renderState() {
   const s = state.settings;
   const draft = modelDirty && getProfile($('model').value, s.customProfiles) ? selected() : null;
-  $('connection-status').textContent = s.hasKey ? '连接已配置' : '未配置连接';
-  $('connection-status').classList.toggle('ready', s.hasKey);
-  $('setup-prompt').hidden = s.hasKey;
+  const fast = s.readingEngine === 'bing';
+  $('connection-status').textContent = fast ? '快速翻译已就绪' : s.hasKey ? 'AI 连接已配置' : '未配置 AI 连接';
+  $('connection-status').classList.toggle('ready', translationReady(s));
+  $('setup-prompt').hidden = translationReady(s);
+  $('reading-engine').value = s.readingEngine;
+  $('engine-hint').textContent = fast ? '页面文本交由微软翻译，无需配置连接。' : '使用已选模型和保存的网关连接。';
+  for (const panel of document.querySelectorAll('[data-ai-settings]')) panel.hidden = fast;
   $('automatic').checked = s.automatic;
   if ($('display-mode')) $('display-mode').value = s.displayMode || 'translated';
   $('reading-hint').textContent = s.displayMode === 'original' ? '暂停新的翻译请求，随时切回译文。' : s.displayMode === 'bilingual' ? '原文与译文对照阅读，页面高度会随内容增加。' : '保留网页结构，复杂排版会保留原文对照。';
   if ($('site-enabled') && /^https?:/.test(activeTab?.url || '')) $('site-enabled').checked = !s.excludedSites.includes(new URL(activeTab.url).hostname);
   renderModelOptions(draft?.modelId || s.selection.modelId);
   renderControls(draft || s.selection);
-  const label = `${getProfile(s.selection.modelId, s.customProfiles)?.name || s.selection.modelId} · ${selectionLabel(s.selection)}`;
+  const label = fast ? '微软快速翻译' : `${getProfile(s.selection.modelId, s.customProfiles)?.name || s.selection.modelId} · ${selectionLabel(s.selection)}`;
   if ($('current-model')) $('current-model').textContent = label;
   $('footer-model').textContent = `当前 · ${label}`;
   if ($('endpoint')) {
@@ -171,6 +175,12 @@ $('automatic').addEventListener('change', async () => {
   try { const result = await call({ type: 'SET_AUTOMATIC', value: $('automatic').checked, expectedRevision: state.settings.revision }); state.settings = result.settings; renderState(); }
   catch (e) { notice(e.message, true); await refresh(); }
 });
+$('reading-engine').addEventListener('change', async () => {
+  $('reading-engine').disabled = true;
+  try { const result = await call({ type: 'SET_READING_ENGINE', engine: $('reading-engine').value, expectedRevision: state.settings.revision }); state.settings = result.settings; renderState(); notice('翻译方式已更新'); }
+  catch (error) { notice(error.message, true); await refresh(); }
+  finally { $('reading-engine').disabled = false; }
+});
 $('display-mode')?.addEventListener('change', async () => {
   try { const result = await call({ type: 'SET_DISPLAY_MODE', mode: $('display-mode').value, expectedPresentationRevision: state.settings.presentationRevision || 1 }); state.settings=result.settings; renderState(); notice('显示方式已更新'); }
   catch(e) { notice(e.message,true); await refresh(); }
@@ -224,9 +234,22 @@ try {
   const checkToken = params.get('install-check'), checkPort = Number(params.get('port'));
   if (/^[a-f0-9]{48}$/.test(checkToken || '') && Number.isInteger(checkPort) && checkPort > 1023 && checkPort < 65536) {
     history.replaceState(null, '', location.pathname);
+    const base = `http://127.0.0.1:${checkPort}`;
+    const before = { hasKey: state.settings.hasKey, model: state.settings.selection.modelId };
+    const handshake = await fetch(`${base}/clearling-install/${checkToken}`, { method: 'POST', credentials: 'omit', redirect: 'error',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'handshake' }) });
+    if (!handshake.ok) throw new Error('安装验证请求已失效');
+    const task = await handshake.json();
+    if (task.id !== chrome.runtime.id || task.version !== chrome.runtime.getManifest().version) throw new Error('安装验证版本不匹配');
+    if (task.activateFast === true) {
+      const result = await call({ type: 'SET_READING_ENGINE', engine: 'bing', expectedRevision: state.settings.revision });
+      state.settings = result.settings; renderState();
+    }
     void fetch(`http://127.0.0.1:${checkPort}/clearling-install/${checkToken}`, {
       method: 'POST', credentials: 'omit', redirect: 'error', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: chrome.runtime.id, version: chrome.runtime.getManifest().version, mode: state.settings.displayMode, model: state.settings.selection.modelId })
+      body: JSON.stringify({ id: chrome.runtime.id, version: chrome.runtime.getManifest().version, mode: state.settings.displayMode,
+        readingEngine: state.settings.readingEngine, automatic: state.settings.automatic,
+        aiConnectionPreserved: before.hasKey === state.settings.hasKey, aiModelPreserved: before.model === state.settings.selection.modelId })
     }).catch(() => {});
   }
   if (document.body.dataset.surface === 'popup') {

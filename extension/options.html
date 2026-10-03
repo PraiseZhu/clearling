@@ -54,6 +54,14 @@
 </label>
 </div>
 <div class="field">
+<label for="reading-engine">翻译方式</label>
+<select id="reading-engine">
+<option value="bing">快速翻译 · 微软</option>
+<option value="ai">AI 精译</option>
+</select>
+<p class="hint" id="engine-hint"></p>
+</div>
+<div class="field">
 <label for="display-mode">阅读方式</label>
 <select id="display-mode">
 <option value="translated">仅显示译文</option>
@@ -63,7 +71,7 @@
 <p class="hint" id="reading-hint">保留网页结构，复杂排版会保留原文对照。</p>
 </div>
 </div>
-<div class="panel">
+<div class="panel" data-ai-settings>
 <h2 class="panel-title">
 <span>02</span> 翻译模型</h2>
 <div class="field model-field">
@@ -107,7 +115,7 @@
 <span>应用模型</span>
 </button>
 </div>
-<details class="custom-model panel">
+<details class="custom-model panel" data-ai-settings>
 <summary>添加自定义模型<i data-lucide="plus" aria-hidden="true">
 </i>
 </summary>
@@ -185,7 +193,7 @@
 <p id="notice" class="notice" role="status" aria-live="polite"></p>
 <footer>
 <span id="footer-model">MiMo V2.6 Flash</span>
-<span>v0.4.0</span>
+<span>v0.5.0</span>
 </footer>
 </div>
 </div>

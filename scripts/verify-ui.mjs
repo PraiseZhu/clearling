@@ -10,11 +10,12 @@ const server=spawn(process.execPath,['scripts/fixture-server.mjs'],{env:{...proc
 const line=await new Promise(resolve=>{const reader=createInterface({input:server.stdout});reader.once('line',s=>{reader.close();resolve(JSON.parse(s));});});
 let browser,options;const checks=[];
 try{
- browser=await launchBrowser(kind,{profileName:`${kind}-qa-ui-v040`});const cdp=browser.cdp;
+ browser=await launchBrowser(kind,{profileName:`${kind}-qa-ui-v050-${Date.now().toString(36)}`});const cdp=browser.cdp;
  const id=await loadCurrentExtension(cdp,path.resolve(process.env.CLEARLING_BUILD_DIR||'dist'));
  options=await cdp.page(`chrome-extension://${id}/options.html`,{hidden:false});await cdp.wait(options,`document.querySelector('#model')?.options.length===${PROFILES.length}`);
  const rpc=m=>cdp.evaluate(options,`chrome.runtime.sendMessage(${JSON.stringify(m)})`,true);
  let state=await rpc({type:'GET_STATE'});assert.equal(state.settings.hasKey,false);
+ state=await rpc({type:'SET_READING_ENGINE',engine:'ai',expectedRevision:state.settings.revision});
  assert.equal(await cdp.evaluate(options,'document.querySelector("#setup-prompt").hidden'),false);
  await cdp.evaluate(options,'document.querySelector("#configure-connection").click()');
  assert.equal(await cdp.evaluate(options,'document.activeElement.id'),'endpoint');

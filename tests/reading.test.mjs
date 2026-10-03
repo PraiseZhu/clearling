@@ -23,7 +23,7 @@ test('provider output must retain local protected placeholders', () => {
   assert.throws(() => parseTranslations('{"translations":[{"id":"b1","text":"使用缓存键"}]}', blocks), /RESPONSE_INCOMPLETE/);
   assert.equal(parseTranslations('{"translations":[{"id":"b1","text":"使用⟦CLR0_0⟧"}]}', blocks)[0].text, '使用⟦CLR0_0⟧');
 });
-const config = effectiveConfig({ ...initialSettings(), endpoint: 'https://example.com' });
+const config = effectiveConfig({ ...initialSettings(), readingEngine: 'ai', endpoint: 'https://example.com' });
 const block = { id: 'b1', text: 'A public sample.', sourceHash: 'one' };
 test('disable during cache lookup prevents dispatch', async () => {
   let release, entered; const inCache = new Promise(r => { entered = r; }); let current = true, calls = 0;
