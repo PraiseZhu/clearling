@@ -44,6 +44,8 @@ const server = http.createServer(async (req, res) => {
   else if (req.url === '/frame') {res.setHeader('Content-Type','text/html; charset=utf-8');res.end('<html lang=\"en\"><body><p id=\"frame-text\">The update preserves existing settings. If validation fails, the previous configuration remains active and no changes are applied.</p></body></html>');return;}
   else if (req.url === '/x-thread') file = path.join(root, 'fixtures/x-thread.html');
   else if (req.url === '/compatibility') file = path.join(root, 'fixtures/compatibility.html');
+  else if (req.url === '/headings') file = path.join(root, 'fixtures/headings.html');
+  else if (req.url === '/title-cards') file = path.join(root, 'fixtures/title-cards.html');
   else if (/^\/icons\/(16|32|48|128)\.png$/.test(req.url)) file = path.join(root, 'dist', req.url.slice(1));
   if (!file) { res.writeHead(404); res.end(); return; }
   try { const data = await readFile(file); res.setHeader('Content-Type', file.endsWith('.png') ? 'image/png' : 'text/html; charset=utf-8'); res.end(data); }

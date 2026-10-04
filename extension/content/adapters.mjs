@@ -7,7 +7,9 @@ export const X_CANDIDATES = `[data-testid="tweetText"],${ARTICLE_TITLE},${CARD_T
 export function xKind(element) {
   if (element.matches('[data-testid="tweetText"]')) return 'tweet';
   if (element.matches(ARTICLE_TITLE)) return 'article-title';
-  if (element.matches(CARD_TEXT)) return 'article-card';
+  // A card may nest dir=auto wrappers around one title. One outer owner keeps
+  // both its direct text and formatted descendants, without duplicate records.
+  if (element.matches(CARD_TEXT) && !element.parentElement?.closest(CARD_TEXT)) return 'article-card';
   if (element.matches('[data-block="true"]') && element.closest(ARTICLE_ROOT) && !element.querySelector('[data-testid="tweetText"],section,[data-block="true"]') && element.tagName !== 'SECTION') return 'article-paragraph';
   return null;
 }
