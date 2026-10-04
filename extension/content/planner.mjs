@@ -108,8 +108,15 @@ export function planElement(element, site = 'generic') {
   // controls. Leave these candidates to the website's own expansion controls.
   const mixed = interactive || layoutBox || !special && hasNative(`${SEMANTIC_SELECTOR},div,ul,ol,table`);
   if ((mixed || element.tagName === 'SUMMARY') && [style.overflowX, style.overflowY].some(value => ['hidden','clip','scroll','auto'].includes(value))) return null;
+  // Draft.js owns the list shell and its generated counter. Replace only its
+  // sole text block, retaining the native LI for numbering and indentation.
+  const children = [...element.children].filter(node => !node.matches(OWN));
+  const sourceElement = kind === 'article-paragraph' && element.tagName === 'LI' && !interactive
+    && children.length === 1 && children[0].matches('div.public-DraftStyleDefault-block')
+    && ![...element.childNodes].some(node => node.nodeType === 3 && node.nodeValue.trim())
+    && readSource(children[0], site).identity === source.identity ? children[0] : null;
   // A mixed container's descendants must keep their native layout and controls.
-  return { ...source, placement: mixed || element.tagName === 'SUMMARY' ? 'inside' : 'after', replaceable: !mixed && element.tagName !== 'SUMMARY', kind, lang };
+  return { ...source, placement: sourceElement || mixed || element.tagName === 'SUMMARY' ? 'inside' : 'after', replaceable: !sourceElement && !mixed && element.tagName !== 'SUMMARY', sourceElement, kind, lang };
 }
 export function restoreProtected(text, protectedValues) {
   for (const [token, value] of protectedValues) {

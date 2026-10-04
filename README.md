@@ -58,7 +58,7 @@ Model availability and thinking behavior must be verified with the actual
 gateway. GLM 5.3 Flash cannot disable native thinking. Qwen's native protocol
 uses enable_thinking, while Cindy's documented adapter uses thinking.type.
 
-Version 0.5.0 is supplied as a ZIP package. To update an existing unpacked
+Version 0.5.1 is supplied as a ZIP package. To update an existing unpacked
 installation while retaining its settings, replace files in the existing loaded
 directory and reload the extension; refresh existing webpages afterward. Avoid
 running two Clearling copies on the same page.
@@ -94,6 +94,13 @@ body, its profile cards, and a multilingual ordinary webpage.
 X rules distinguish tweet bodies, Article card title/summary, Article title
 and rich-text blocks. Original nodes stay in place and can be restored; links
 and inline code are rebuilt from local typed mappings, never model HTML.
+
+Version 0.5.1 corrects translation-only reading of X Article lists whose native
+numbering uses CSS counters. It hides the verified inner text block after a
+successful translation while keeping the original list item, marker and
+indentation. Bilingual and original modes restore that same text block;
+pending or failed translations keep it readable. Chrome/Ego regressions also
+cover replaced source blocks, removed projections and dynamically added controls.
 Unsafe mixed containers retain their original controls and content. Image text,
 video, scanned PDF, closed Shadow DOM and browser-restricted pages are not
 covered by this DOM translator.

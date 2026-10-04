@@ -22,7 +22,7 @@ try {
  assert.equal(await cdp.evaluate(page,'getComputedStyle(document.querySelector("#main-text")).display'),'none');
  const original=await cdp.evaluate(page,'document.querySelector("#main-text").innerHTML');
  checks.push('default translation-only hides source without mutating its original children');
- for(const selector of ['#reply-text','#short','#inline','#card-title','#card-summary','#article-title','#article-paragraph','#article-list','#article-quote','#article-embedded','#recycled-text']) {
+ for(const selector of ['#reply-text','#short','#inline','#card-title','#card-summary','#article-title','#article-paragraph','#article-list','#draft-ordered','#draft-next','#draft-unordered','#article-quote','#article-embedded','#recycled-text']) {
    await scroll(selector);await cdp.wait(page,ready(selector));
    assert.equal(await cdp.evaluate(page,`(()=>{const e=document.querySelector(${JSON.stringify(selector)});return e.querySelector(':scope > [data-clearling=translation]') ? getComputedStyle(e).display!=='none' : getComputedStyle(e).display==='none'})()`),true,selector);
  }
@@ -32,6 +32,13 @@ try {
  const links=await cdp.evaluate(page,'(()=>{const s=document.querySelector("#source-link"),t=document.querySelector("#inline").nextElementSibling;return {original:s.href,translated:t.querySelector("a").href,code:t.querySelector("code").textContent}})()');
  assert.equal(links.original,links.translated);assert.equal(links.code,'cacheKey');
  checks.push('translated links and protected inline code retain safe semantics');
+ const draftSelectors=['#draft-ordered','#draft-next','#draft-unordered'];
+ const draftBefore=await cdp.evaluate(page,`(()=>{
+   window.draftOriginals=new Map(${JSON.stringify(draftSelectors)}.map(selector=>{const li=document.querySelector(selector),source=li.querySelector('.public-DraftStyleDefault-block');return[selector,{li,source,nodes:[...source.childNodes]}]}));
+   return [...window.draftOriginals].map(([selector,{li,source}])=>({selector,html:source.innerHTML,marker:getComputedStyle(li,'::before').content,value:li.getAttribute('value')}));
+ })()`);
+ assert.equal(await cdp.evaluate(page,`document.querySelector('#draft-ordered > [data-clearling]').querySelector('a').hash`),'#article-title');
+ assert.equal(await cdp.evaluate(page,`document.querySelector('#draft-ordered > [data-clearling]').querySelector('code').textContent`),'cacheKey');
  const metrics=()=>fetch(`${line.url}/metrics`).then(r=>r.json());
  await cdp.wait(page,`[...document.querySelectorAll('[data-clearling]')].every(e=>e.dataset.phase!=='pending')`);
  const before=(await metrics()).calls, revision=state.settings.revision;
@@ -40,11 +47,50 @@ try {
   await cdp.wait(page,`document.querySelector('#main-text').nextElementSibling.dataset.mode===${JSON.stringify(mode)}`);
   assert.equal(await cdp.evaluate(page,'document.querySelector("#main-text").innerHTML'),original);
   if(mode==='original')assert.notEqual(await cdp.evaluate(page,'getComputedStyle(document.querySelector("#main-text")).display'),'none');
+  const draft=await cdp.evaluate(page,`(()=>{return [...window.draftOriginals].map(([selector,{li,source,nodes}])=>{const output=li.querySelector(':scope > [data-clearling]');return {selector,sourceVisible:getComputedStyle(source).display!=='none',outputVisible:!output.hidden,outputMode:output.dataset.mode,shellVisible:getComputedStyle(li).display!=='none',html:source.innerHTML,marker:getComputedStyle(li,'::before').content,value:li.getAttribute('value'),sameNodes:nodes.length===source.childNodes.length&&nodes.every((node,i)=>node===source.childNodes[i])}})})()`);
+  for(let i=0;i<draft.length;i++){
+    assert.equal(draft[i].sourceVisible,mode!=='translated',`${mode}: original text must follow the reading mode`);
+    assert.equal(draft[i].outputVisible,mode!=='original',`${mode}: translation must follow the reading mode`);
+    assert.equal(draft[i].outputMode,mode);assert.equal(draft[i].shellVisible,true);
+    for(const key of ['html','marker','value'])assert.equal(draft[i][key],draftBefore[i][key]);
+    assert.equal(draft[i].sameNodes,true);
+  }
+  assert.equal(await cdp.evaluate(page,`document.querySelector('#draft-ordered-list').children.length`),2);
+  assert.equal(await cdp.evaluate(page,`document.querySelector('#draft-unordered-list').children.length`),1);
  }
  assert.equal((await metrics()).calls,before);
  checks.push('three display modes preserve DOM, request revision and API count');
- await cdp.evaluate(page,'document.querySelector("#inline").nextElementSibling.remove()');await cdp.wait(page,ready('#inline'));
+ checks.push('Draft.js ordered and bulleted article lists honor all three modes without replacing native counters or source nodes');
+ await scroll('#draft-ordered');
+ await cdp.evaluate(page,`(()=>{const li=document.querySelector('#draft-ordered'),source=li.querySelector('.public-DraftStyleDefault-block');window.detachedDraftSource=source;const replacement=source.cloneNode(true);replacement.removeAttribute('data-cl-source');source.replaceWith(replacement)})()`);
+ await cdp.wait(page,`document.querySelector('#draft-ordered > .public-DraftStyleDefault-block').hasAttribute('data-cl-source') && document.querySelector('#draft-ordered > [data-clearling]')?.dataset.phase==='ready'`);
+ assert.equal(await cdp.evaluate(page,`window.detachedDraftSource.hasAttribute('data-cl-source')`),false);
+ await cdp.evaluate(page,`document.querySelector('#draft-ordered > [data-clearling]').remove()`);
+ await cdp.wait(page,ready('#draft-ordered'));
+ assert.equal(await cdp.evaluate(page,`getComputedStyle(document.querySelector('#draft-ordered > .public-DraftStyleDefault-block')).display`),'none');
  assert.equal((await metrics()).calls,before);
+ checks.push('replacing an identical native article text block or removing its projection restores ownership without another API request');
+ await cdp.evaluate(page,`(()=>{const button=document.createElement('button');button.id='draft-native-control';button.textContent='Open';window.draftClicks=0;button.onclick=()=>window.draftClicks++;document.querySelector('#draft-ordered > .public-DraftStyleDefault-block').append(button)})()`);
+ await cdp.wait(page,`!document.querySelector('#draft-ordered > .public-DraftStyleDefault-block').hasAttribute('data-cl-source') && document.querySelector('#draft-ordered > [data-clearling]')?.dataset.phase==='ready'`);
+ assert.equal(await cdp.evaluate(page,`(()=>{const button=document.querySelector('#draft-native-control');button.click();return button.getBoundingClientRect().width>0 && window.draftClicks===1})()`),true);
+ await cdp.evaluate(page,`document.querySelector('#draft-native-control').remove()`);
+ await cdp.wait(page,`document.querySelector('#draft-ordered > .public-DraftStyleDefault-block').hasAttribute('data-cl-source')`);
+ assert.equal((await metrics()).calls,before);
+ checks.push('native controls inserted into article text remain visible and clickable; removing them restores translated-only reading');
+ await scroll('#draft-next');
+ await cdp.evaluate(page,`document.querySelector('#draft-next > .public-DraftStyleDefault-block').textContent='[SLOW] An article list should retain its original text while translation is pending.'`);
+ await cdp.wait(page,`document.querySelector('#draft-next > [data-clearling]')?.dataset.phase==='pending'`);
+ assert.notEqual(await cdp.evaluate(page,`getComputedStyle(document.querySelector('#draft-next > .public-DraftStyleDefault-block')).display`),'none');
+ await cdp.wait(page,ready('#draft-next'));
+ await cdp.evaluate(page,`document.querySelector('#draft-next > .public-DraftStyleDefault-block').textContent='[FAIL] A failed article list must keep its original text readable.'`);
+ await cdp.wait(page,`document.querySelector('#draft-next > [data-clearling]')?.dataset.phase==='failed'`);
+ assert.notEqual(await cdp.evaluate(page,`getComputedStyle(document.querySelector('#draft-next > .public-DraftStyleDefault-block')).display`),'none');
+ await cdp.evaluate(page,`document.querySelector('#draft-next > .public-DraftStyleDefault-block').textContent='The article list becomes readable after a successful retry.'`);
+ await cdp.wait(page,ready('#draft-next'));
+ checks.push('pending and failed article lists keep originals readable and hide them only after a valid ready result');
+ const beforeRemove=(await metrics()).calls;
+ await cdp.evaluate(page,'document.querySelector("#inline").nextElementSibling.remove()');await cdp.wait(page,ready('#inline'));
+ assert.equal((await metrics()).calls,beforeRemove);
  checks.push('removed translated-only projection restores from local result');
  await cdp.evaluate(page,'document.querySelector("#source-link").href="#main"');
  await cdp.wait(page,'document.querySelector("#inline").nextElementSibling?.querySelector("a")?.hash==="#main"');

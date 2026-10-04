@@ -2,7 +2,7 @@ const OUTPUT = '[data-clearling="translation"]';
 
 export function anchor(item) { return item.element.hasAttribute('data-cl-source') && item.translation?.isConnected ? item.translation : item.element; }
 export function ownsView(item) { return item.translation?.isConnected && (item.translation.dataset.inside === 'true' || item.placement === 'inside' ? item.translation.parentNode === item.element : item.translation.previousElementSibling === item.element && item.translation.parentNode === item.element.parentNode); }
-export function restoreSource(item) { item.element.removeAttribute('data-cl-source'); }
+export function restoreSource(item) { item.element.removeAttribute('data-cl-source'); item.sourceElement?.removeAttribute('data-cl-source'); }
 export function disposeView(item) { restoreSource(item); item.translation?.remove(); item.translation = null; }
 export function isInteracting(item) {
   if (item.element.contains(document.activeElement) && document.activeElement !== document.body) return true;
@@ -77,9 +77,11 @@ export function present(item, mode, phase = item.phase || 'pending', content = n
   node.style.contain = item.placement === 'inside' || node.dataset.inside === 'true' ? 'inline-size' : '';
   const original = mode === 'original' || item.showOriginal || isInteracting(item);
   node.hidden = original || (mode === 'bilingual' && phase === 'pending');
-  const hideSource = !original && phase === 'ready' && mode === 'translated' && item.replaceable;
+  const translated = !original && phase === 'ready' && mode === 'translated';
+  const hideSource = translated && item.replaceable;
   item.element.toggleAttribute('data-cl-source', hideSource);
-  node.style.setProperty('margin-top', hideSource ? item.sourceMargins.top : '.35em', 'important');
+  item.sourceElement?.toggleAttribute('data-cl-source', translated);
+  node.style.setProperty('margin-top', hideSource ? item.sourceMargins.top : translated && item.sourceElement ? '0' : '.35em', 'important');
   node.style.setProperty('margin-bottom', hideSource ? item.sourceMargins.bottom : '0', 'important');
   node.dataset.mode = mode;
   node.setAttribute('aria-busy',String(phase === 'pending'));

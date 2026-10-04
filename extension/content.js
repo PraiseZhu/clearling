@@ -71,10 +71,11 @@ import { BODY_SELECTOR, CANDIDATE_SELECTOR, OWN, EXCLUDED, siteFor, planElement,
     diagnostics.inspected++;
     if (!plan) { if (previous) remove(previous); return; }
     if (previous?.identity === plan.identity) {
-      const placementChanged = previous.placement !== plan.placement || previous.replaceable !== plan.replaceable;
+      const placementChanged = previous.placement !== plan.placement || previous.replaceable !== plan.replaceable || previous.sourceElement !== plan.sourceElement;
+      if (previous.translation && (placementChanged || !ownsPlacement(previous))) { disposeView(previous); previous.renderedRevision = 0; pending.add(previous); }
       previous.placement = plan.placement;
       previous.replaceable = plan.replaceable;
-      if (previous.translation && (placementChanged || !ownsPlacement(previous))) { disposeView(previous); previous.renderedRevision = 0; pending.add(previous); }
+      previous.sourceElement = plan.sourceElement;
       if (previous.translation) {
         const style=getComputedStyle(element);
         for(const key of ['fontSize','lineHeight','fontFamily','fontWeight','letterSpacing','color','textAlign'])previous.translation.style[key]=style[key];
@@ -139,7 +140,7 @@ import { BODY_SELECTOR, CANDIDATE_SELECTOR, OWN, EXCLUDED, siteFor, planElement,
         for (const node of change.removedNodes) {
           const item = outputOwners.get(node);
           if (item && records.get(item.element) === item && item.element.isConnected && item.translation === node) {
-            item.element.removeAttribute('data-cl-source');item.translation = null; item.renderedRevision = 0; pending.add(item); schedulePump();
+            disposeView(item); item.renderedRevision = 0; pending.add(item); schedulePump();
           }
         }
         continue;
@@ -184,8 +185,8 @@ import { BODY_SELECTOR, CANDIDATE_SELECTOR, OWN, EXCLUDED, siteFor, planElement,
     if (records.get(item.element) !== item || !item.element.isConnected) return;
     const plan=planElement(item.element,site);
     if(!plan || plan.identity!==item.identity){enqueue(item.element);return;}
-    if(item.placement!==plan.placement || item.replaceable!==plan.replaceable)disposeView(item);
-    item.placement=plan.placement;item.replaceable=plan.replaceable;
+    if(item.placement!==plan.placement || item.replaceable!==plan.replaceable || item.sourceElement!==plan.sourceElement)disposeView(item);
+    item.placement=plan.placement;item.replaceable=plan.replaceable;item.sourceElement=plan.sourceElement;
     if(isInteracting(item)){schedulePump(200);return;}
     const content=renderRichText(item,joinTranslations(item.chunks,item.results));
     const readingAnchor=[...records.values()].find(record=>{const rect=anchor(record).getBoundingClientRect();return rect.top>=0 && rect.top<innerHeight;});
