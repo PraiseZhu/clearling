@@ -18,7 +18,7 @@ const probe = new Promise(resolve => { resolveProbe = resolve; });
 const server = http.createServer(async (req, res) => {
   if (req.url === `/clearling-probe/${token}` && req.method === 'GET') {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.end(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>清译安装验证</title><style>body{font:18px/1.6 Arial;max-width:600px;margin:40px auto}p{margin:30px 0}</style></head><body><main><p>Visible posts should remain readable while translation is loading. ${token.slice(0,8)}-0.</p><p>Keep numbers such as 25 and the meaning of each sentence intact. ${token.slice(0,8)}-1.</p><p>Cached translations should not require another model request. ${token.slice(0,8)}-2.</p></main><script>const timer=setInterval(()=>{const ready=[...document.querySelectorAll('[data-clearling="translation"][data-phase="ready"]')];if(ready.length===3&&ready.every(n=>n.dataset.model==='microsoft-edge')){clearInterval(timer);fetch(location.pathname,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({readyCount:3,readingModel:'microsoft-edge'})});}},100);</script></body></html>`); return;
+    res.end(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>清译安装验证</title><style>body{font:18px/1.6 Arial;max-width:600px;margin:40px auto}p{margin:30px 0}</style></head><body><main><p>Visible posts should remain readable while translation is loading. ${token.slice(0,8)}-0.</p><p>Keep numbers such as 25 and the meaning of each sentence intact. ${token.slice(0,8)}-1.</p><p>Cached translations should not require another model request. ${token.slice(0,8)}-2.</p></main><script>const timer=setInterval(()=>{const native=[...document.querySelectorAll('[data-cl-native][data-cl-phase="ready"]')];const legacy=[...document.querySelectorAll('[data-clearling="translation"][data-phase="ready"]')].filter(n=>!n.parentElement?.hasAttribute('data-cl-native'));const ready=[...native,...legacy];if(ready.length===3&&ready.every(n=>(n.dataset.clModel||n.dataset.model)==='microsoft-edge'&&/[\\u3400-\\u9fff]/.test(n.textContent))){clearInterval(timer);fetch(location.pathname,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({readyCount:3,readingModel:'microsoft-edge'})});}},100);</script></body></html>`); return;
   }
   const install = req.url === `/clearling-install/${token}`;
   const sample = req.url === `/clearling-probe/${token}`;
@@ -51,7 +51,7 @@ try {
   await open(url); retry = setTimeout(() => void open(url).catch(() => {}), 3000);
   const result = await Promise.race([receipt, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('INSTALL_RECEIPT_TIMEOUT')), 30000); })]);
   clearTimeout(timer); clearTimeout(retry);
-  let translation = { tested: false, reason: 'reading paused by saved preferences' };
+  let translation = { tested: false, reason: result.readingEngine !== 'bing' ? 'saved AI engine retained; no paid verification request sent' : 'reading paused by saved preferences' };
   if (result.automatic && result.mode !== 'original' && result.readingEngine === 'bing') {
     await open(`http://127.0.0.1:${port}/clearling-probe/${token}`);
     translation = await Promise.race([probe, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('INSTALL_TRANSLATION_PROBE_TIMEOUT')), 30000); })]);

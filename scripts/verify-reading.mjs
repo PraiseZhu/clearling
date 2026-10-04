@@ -13,7 +13,7 @@ const line = await new Promise((resolve, reject) => { const reader = createInter
 let browser, options;
 const checks = [];
 try {
-  browser = await launchBrowser(kind, { profileName: `${kind}-qa-reading-v030` });
+  browser = await launchBrowser(kind, { profileName: `${kind}-qa-reading-${Date.now().toString(36)}` });
   const cdp = browser.cdp;
   const id = await loadCurrentExtension(cdp, path.resolve(root,process.env.CLEARLING_BUILD_DIR || 'dist'));
   options = await cdp.page(`chrome-extension://${id}/options.html`, { hidden: false });
@@ -23,6 +23,7 @@ try {
   if (state.settings.hasKey) throw new Error('QA_PROFILE_HAS_EXISTING_CONNECTION');
   state=await rpc({type:'SET_DISPLAY_MODE',mode:'bilingual',expectedPresentationRevision:state.settings.presentationRevision});
   const page = await cdp.page(`${line.url}/x-thread`, { hidden: false });
+  await cdp.call('Emulation.setDeviceMetricsOverride', { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false }, page.sessionId);
   await cdp.wait(page, '!!document.querySelector("#main-text")');
   const measure = `(()=>{const box=e=>{const r=e.getBoundingClientRect();return{x:r.x,width:r.width,height:r.height}};return{feed:box(document.querySelector('.feed')),names:[...document.querySelectorAll('.username')].map(box),avatars:[...document.querySelectorAll('.avatar')].map(box),actions:[...document.querySelectorAll('.actions')].map(box),source:document.querySelector('#main-text').innerHTML,clamp:getComputedStyle(document.querySelector('#quote-text')).webkitLineClamp,sourceLink:document.querySelector('#source-link').getAttribute('href')}})()`;
   const before = await cdp.evaluate(page, measure);
@@ -92,7 +93,7 @@ try {
   }
   checks.push('desktop and narrow layout have no horizontal overflow');
   await cdp.call('Page.navigate', { url: `${line.url}/article` }, page.sessionId);
-  await cdp.wait(page, 'document.querySelector("#first")?.nextElementSibling?.dataset.phase==="ready"');
+  await cdp.wait(page, 'document.querySelector("#first")?.dataset.clPhase==="ready"');
   await cdp.evaluate(page, 'document.querySelector("#table-cell").scrollIntoView()');
   await cdp.wait(page, '!!document.querySelector("#table-cell [data-clearling]")');
   assert.equal(await cdp.evaluate(page, 'document.querySelector("#table-row").children.length'), 2);
@@ -109,7 +110,7 @@ try {
   const disconnected = await cdp.call('Runtime.evaluate', { contextId: contentContext, expression: 'globalThis.__testCalls', returnByValue: true }, page.sessionId);
   assert.ok(disconnected.result.value.translate <= 2 && disconnected.result.value.state <= 2, JSON.stringify(disconnected.result.value));
   await cdp.call('Runtime.evaluate', { contextId: contentContext, expression: 'chrome.runtime.sendMessage=globalThis.__testTransport;document.dispatchEvent(new Event("visibilitychange"))', returnByValue: true }, page.sessionId);
-  await cdp.wait(page, 'document.querySelector("#first")?.nextElementSibling?.textContent.includes("reconnection test")');
+  await cdp.wait(page, 'document.querySelector("#first")?.dataset.clPhase==="ready" && document.querySelector("#first > [data-clearling]")?.textContent.includes("reconnection test")');
   checks.push('transport disconnection backs off and resumes without request storms');
   const report = { version: await cdp.evaluate(options, 'chrome.runtime.getManifest().version'), browser: kind, extensionId: id, checks, syntheticOnly: true, time: new Date().toISOString() };
   await writeFile(path.join(root, 'artifacts', `reading-${kind}.json`), JSON.stringify(report, null, 2)); console.log(JSON.stringify(report, null, 2));

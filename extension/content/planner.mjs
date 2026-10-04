@@ -1,4 +1,5 @@
 import { X_CANDIDATES, xKind } from './adapters.mjs';
+import { sourceText,isGeneratedText } from './source-text.mjs';
 export const BODY_SELECTOR = X_CANDIDATES;
 export const SEMANTIC_SELECTOR = 'p,h1,h2,h3,h4,h5,h6,li,blockquote,figcaption,td,th,dt,dd,summary';
 export const CANDIDATE_SELECTOR = `${SEMANTIC_SELECTOR},div`;
@@ -24,7 +25,10 @@ export function eligibleText(text, { site = 'generic', lang = '' } = {}) {
   const han = (plain.match(/[\u3400-\u9fff]/g) || []).length;
   const foreign = (plain.match(/[\p{L}]/gu) || []).length - han;
   const eastAsianForeign = /[\u3040-\u30ff\uac00-\ud7af]/.test(plain) || /^(ja|ko)(-|$)/i.test(lang);
-  if (!eastAsianForeign && han && han / Math.max(1, han + foreign) > 0.3 && !/[a-zA-Z]{2,}(?:[ ,]+[a-zA-Z]{2,}){3,}/.test(plain)) return false;
+  // Chinese prose with API names or status identifiers is already readable.
+  // Require an actual foreign phrase before translating mixed Chinese text.
+  const prose = plain.replace(/\b[A-Za-z0-9]+(?:_[A-Za-z0-9]+)+\b|\b[A-Z]{2,}\b/g, '');
+  if (!eastAsianForeign && han && !/[a-zA-Z]{2,}(?:[ ,]+[a-zA-Z]{2,}){3,}/.test(prose)) return false;
   if (foreign < 2 && !eastAsianForeign) return false;
   return site === 'x' || plain.length >= 5;
 }
@@ -44,21 +48,33 @@ function nestedBoundary(element) {
   return element.matches(`${SEMANTIC_SELECTOR},div,section,article,main,ul,ol,table,header,footer,aside`);
 }
 
-/** Inline protected values stay local. Original markup is never rewritten. */
+/** Tokens preserve inline boundaries; native text slots never own host controls. */
 export function readSource(element, site = 'generic') {
   const parts = [], protectedValues = new Map(), protectedNodes = new Map();
+  const native = site !== 'x', textSlots = [[]];
   let prefix = 0;
   while (element.textContent.includes(`⟦CLR${prefix}_`)) prefix++;
-  const protect = (text, descriptor) => { const token = `⟦CLR${prefix}_${protectedValues.size}⟧`; protectedValues.set(token, text); if (descriptor) protectedNodes.set(token, descriptor); parts.push(token); return token; };
+  const protect = (text, descriptor, splitSlot = true) => { const token = `⟦CLR${prefix}_${protectedValues.size}⟧`; protectedValues.set(token, text); if (descriptor) protectedNodes.set(token, descriptor); parts.push(token); if (splitSlot) textSlots.push([]); return token; };
   const visit = node => {
-    if (node.nodeType === 3) { parts.push(node.nodeValue); return; }
-    if (node.nodeType !== 1 || node.matches(EXCLUDED)) return;
-    if (site !== 'x' && node.matches(SOFT_SKIP)) return;
-    if (node.tagName === 'BR') { parts.push('\n'); return; }
-    if (node.matches('code,kbd,samp')) { protect(node.textContent, { type: 'value', tag: node.localName, text: node.textContent }); return; }
+    if (node.nodeType === 3) {
+      if(native&&isGeneratedText(node))return;
+      let text = native ? sourceText(node) : node.nodeValue;
+      if (native && ['normal','nowrap'].includes(getComputedStyle(node.parentElement || element).whiteSpace)) text = text.replace(/\s+/g, ' ');
+      if (native) for (const part of text.split(/(\r\n|\r|\n)/g)) {
+        if (/^[\r\n]+$/.test(part)) protect(part, { type: 'text-value' }, false); else parts.push(part);
+      } else parts.push(text);
+      textSlots.at(-1).push(node); return;
+    }
+    if (node.nodeType !== 1 || node.matches(OWN)) return;
+    const style = native ? getComputedStyle(node) : null;
+    if (node.matches(EXCLUDED) || native && (node.matches(SOFT_SKIP) || nestedBoundary(node) || node.matches('img,picture,relative-time,time-ago,[datetime]') || style.display==='none' || style.visibility==='hidden' || style.opacity==='0')) {
+      if (native && textSlots.some(slot => slot.some(text => sourceText(text).trim()))) protect('', { type: 'opaque' });
+      return;
+    }
+    if (node.tagName === 'BR') { if (native) protect('\n', { type: 'break' }); else parts.push('\n'); return; }
+    if (node.matches('code,kbd,samp')) { protect(node.textContent, { type: 'value', tag: node.localName, text: node.textContent, ...(native ? { element: node } : {}) }); return; }
     if (node.tagName === 'IMG') { if (node.getAttribute('alt')) protect(node.getAttribute('alt')); return; }
-    if (site !== 'x' && nestedBoundary(node)) return;
-    if (node.matches('a[href],strong,b,em,i')) {
+    if (node.matches(native ? 'a[href],span,strong,b,em,i,u,s,small,sup,sub,mark,cite,q,abbr,bdi,bdo' : 'a[href],strong,b,em,i')) {
       const attrs = {};
       if (node.matches('a')) {
         const href = new URL(node.getAttribute('href'), document.baseURI);
@@ -66,15 +82,28 @@ export function readSource(element, site = 'generic') {
         attrs.href = href.href;
         if (node.target === '_blank') { attrs.target = '_blank'; attrs.rel = 'noopener noreferrer'; }
       }
-      const open = protect('', { type: 'open', tag: node.localName, attrs });
+      const open = protect('', { type: 'open', tag: node.localName, attrs, ...(native ? { element: node } : {}) });
       for (const child of node.childNodes) visit(child);
       protect('', { type: 'close', open }); return;
     }
     for (const child of node.childNodes) visit(child);
   };
   for (const node of element.childNodes) visit(node);
-  const text = parts.join('').replace(/\u00a0/g, ' ').replace(/[\t ]+/g, ' ').replace(/ *\n */g, '\n').replace(/\n{3,}/g, '\n\n').trim();
-  return { text, protectedValues, protectedNodes, identity: JSON.stringify([text, [...protectedValues], [...protectedNodes]]) };
+  if (native) {
+    // A control following all prose does not split two text slots. Keeping its
+    // boundary would needlessly invalidate cached text when controls appear.
+    while (protectedNodes.size && [...protectedNodes.values()].at(-1)?.type === 'opaque' && !textSlots.at(-1).some(node => sourceText(node).trim())) {
+      const token=[...protectedNodes.keys()].at(-1);
+      protectedNodes.delete(token);protectedValues.delete(token);
+      parts[parts.lastIndexOf(token)]='';
+      const tail=textSlots.pop();textSlots.at(-1).push(...tail);
+    }
+  }
+  const joined = parts.join('');
+  const text = native ? joined.trim() : joined.replace(/\u00a0/g, ' ').replace(/[\t ]+/g, ' ').replace(/ *\n */g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  const descriptors = [...protectedNodes].map(([token, { element: _element, ...descriptor }]) => [token, descriptor]);
+  const sourceValues = textSlots.map(slot => slot.map(node => native ? sourceText(node) : node.nodeValue));
+  return { text, protectedValues, protectedNodes, textSlots, sourceValues, rawIdentity: JSON.stringify(sourceValues), identity: JSON.stringify([text, [...protectedValues], descriptors]) };
 }
 export function planElement(element, site = 'generic') {
   if (!(element instanceof Element) || composedClosest(element, EXCLUDED) || element.isContentEditable) return null;
@@ -83,6 +112,10 @@ export function planElement(element, site = 'generic') {
   if (special && !kind) return null;
   if (!special && (composedClosest(element, SOFT_SKIP) || composedClosest(element, 'header,footer,aside'))) return null;
   if (!safeFlow(element)) return null;
+  const hasNative = selector => [...element.querySelectorAll(selector)].some(node => !node.closest(OWN));
+  // A layout/metadata container is not a paragraph. Its actual leaf paragraphs
+  // are independently scanned, without inserting output into headers or rows.
+  if (!special && element.tagName === 'DIV' && hasNative(`${SEMANTIC_SELECTOR},div,section,article,ul,ol,table,button,input,select,textarea,img,svg,time,relative-time,time-ago,[datetime],[role="button"]`)) return null;
   const source = readSource(element, site);
   const lang = element.lang || element.closest('[lang]')?.lang || '';
   if (!eligibleText(source.text, { site, lang })) return null;
@@ -91,11 +124,11 @@ export function planElement(element, site = 'generic') {
     if ([...element.querySelectorAll('a')].filter(node => !node.closest(OWN)).length > 2 && source.text.length < 100) return null;
   }
   if (!element.parentNode) return null;
-  const hasNative = selector => [...element.querySelectorAll(selector)].some(node => !node.closest(OWN));
   const interactive = hasNative('button,input,select,textarea,img,picture,video,audio,iframe,canvas,svg,math,[translate="no"],.notranslate,[role="button"],[contenteditable]:not([contenteditable="false"])');
   const style = getComputedStyle(element);
   const parent = element.parentElement || element.getRootNode().host;
   const parentStyle = parent ? getComputedStyle(parent) : null;
+  if (!special) return { ...source, placement: 'inside', replaceable: false, sourceElement: null, native: true, kind, lang };
   // A projection cannot inherit the source's grid placement, flex sizing, box
   // decoration or generated content. Keep those host-owned boxes in place.
   const layoutBox = element.matches('td,th') || parentStyle?.display.includes('grid')
@@ -117,6 +150,34 @@ export function planElement(element, site = 'generic') {
     && readSource(children[0], site).identity === source.identity ? children[0] : null;
   // A mixed container's descendants must keep their native layout and controls.
   return { ...source, placement: sourceElement || mixed || element.tagName === 'SUMMARY' ? 'inside' : 'after', replaceable: !sourceElement && !mixed && element.tagName !== 'SUMMARY', sourceElement, kind, lang };
+}
+export function sameTranslation(source, translated, protectedValues) {
+  const normalized = value => restoreProtected(value, protectedValues).normalize('NFKC').replace(/\s+/g, ' ').trim();
+  return normalized(source) === normalized(translated);
+}
+
+// Dense markup is retried as readable text slots if a machine response loses
+// protected markers. Native markup and private/code values remain local.
+export function nativeFragmentPlan(item) {
+  const boundaries=[],parts=[''];
+  for(const part of item.text.split(/(⟦CLR\d+_\d+⟧)/g)){
+    if(item.protectedNodes.has(part)){boundaries.push(part);parts.push('');}
+    else parts[parts.length-1]+=part;
+  }
+  if(!boundaries.length)return null;
+  const chunks=[],slots=parts.map(original=>{
+    if(!eligibleText(original,{site:'x',lang:item.lang})&&!/^[aAiI]$/.test(original.trim()))return{original,indexes:[]};
+    const pieces=splitSource(original),indexes=pieces.map(piece=>{chunks.push(piece);return chunks.length-1;});
+    return{original,pieces,indexes};
+  });
+  return chunks.length?{chunks,slots,boundaries}:null;
+}
+
+export function joinNativeFragments(plan,results){
+  return plan.slots.map((slot,i)=>{
+    const text=slot.indexes.length?(slot.original.match(/^\s*/)?.[0]||'')+joinTranslations(slot.pieces,slot.indexes.map(index=>results[index]))+(slot.original.match(/\s*$/)?.[0]||''):slot.original;
+    return text+(plan.boundaries[i]||'');
+  }).join('');
 }
 export function restoreProtected(text, protectedValues) {
   for (const [token, value] of protectedValues) {
