@@ -58,7 +58,7 @@ Model availability and thinking behavior must be verified with the actual
 gateway. GLM 5.3 Flash cannot disable native thinking. Qwen's native protocol
 uses enable_thinking, while Cindy's documented adapter uses thinking.type.
 
-Version 0.5.1 is supplied as a ZIP package. To update an existing unpacked
+Version 0.5.2 is supplied as a ZIP package. To update an existing unpacked
 installation while retaining its settings, replace files in the existing loaded
 directory and reload the extension; refresh existing webpages afterward. Avoid
 running two Clearling copies on the same page.
@@ -78,7 +78,7 @@ Real installation requires Chrome/Ego to load the MV3 manifest, run its worker
 and automatically inject its isolated content script. Merely injecting a
 JavaScript file is not installation evidence.
 
-The source has 45 Node tests. Browser checks run through
+The source has 56 Node tests. Browser checks run through
 `scripts/verify-reading.mjs`, `scripts/verify-ui.mjs`,
 `scripts/verify-presentation.mjs` and `scripts/verify-layout.mjs`, with JSON
 reports and UI screenshots in the ignored `artifacts/` directory.
@@ -101,17 +101,35 @@ successful translation while keeping the original list item, marker and
 indentation. Bilingual and original modes restore that same text block;
 pending or failed translations keep it readable. Chrome/Ego regressions also
 cover replaced source blocks, removed projections and dynamically added controls.
-Unsafe mixed containers retain their original controls and content. Image text,
+Image text,
 video, scanned PDF, closed Shadow DOM and browser-restricted pages are not
 covered by this DOM translator.
 
-Grid items, flex items with custom sizing, decorated text boxes, table cells and
-paragraphs containing media retain their source container and show the translation
-inside it. The translation does not contribute to the container's intrinsic width.
-Clipped containers requiring this fallback retain the original instead of adding
-an unreadable translation. Ordinary paragraphs still support translation-only
-replacement. Bilingual content and this conservative fallback can increase page
-height; arbitrary websites are not guaranteed to retain identical geometry.
+Version 0.5.2 preserves generic-page elements, native styles and event listeners
+by updating existing text nodes in translation-only mode. Only explicitly selected
+bilingual mode inserts a translated block. Original mode restores the original
+text, while a subsequent website edit wins over an older stored value. Results
+are checked against protected text slots before any write; unmappable results
+leave the original readable. Waiting and failed requests add no placeholder row.
+Short sentence punctuation outside the outermost inline tags may use an owned
+text node, which is removed on original-mode restoration; no wrapper element is
+introduced. Website edits or removal of that node are respected.
+If Microsoft loses markers in densely formatted prose, the same fast provider
+retries its readable text slots and reassembles the original formatting locally.
+Protected code and controls stay local; this does not switch to the paid AI path.
+
+Layout containers and common author/time metadata are excluded from generic
+paragraph detection. Chinese technical labels and unchanged translations do not
+produce a second copy. Normal HTML indentation collapses as the browser would;
+explicit BR and pre-wrap line breaks remain local and protected. Translated text
+can naturally wrap or change intrinsic content widths, but the extension does
+not replace host layout boxes or insert hidden source wrappers.
+
+`scripts/verify-compatibility.mjs` checks timeline metadata, decorated headings,
+rich inline text, native controls, grids, flex, tables and dynamic content in
+isolated Chrome/Ego profiles. `scripts/verify-public-layout.mjs` checks native
+structure and mode switching on public documentation/readme pages with the real
+Microsoft provider; it records metadata only and requires no user login.
 
 Dynamic controls trigger placement re-evaluation without replacing their event
 listeners. Protected link/formatting tokens must remain in order before results

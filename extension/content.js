@@ -1,7 +1,8 @@
 import { anchor, ownsView, disposeView, createView, renderRichText, present, isInteracting } from './content/presentation.mjs';
 import { ViewportSchedule } from './content/scheduler.mjs';
 import { translationReady } from './shared/core.mjs';
-import { BODY_SELECTOR, CANDIDATE_SELECTOR, OWN, EXCLUDED, siteFor, planElement, sourceHash, splitSource, joinTranslations } from './content/planner.mjs';
+import { BODY_SELECTOR, CANDIDATE_SELECTOR, OWN, EXCLUDED, siteFor, planElement, sourceHash, splitSource, joinTranslations, sameTranslation, nativeFragmentPlan, joinNativeFragments } from './content/planner.mjs';
+import { isProjectedMutation, isProjectedChildMutation, sameTextSlots, prepareNativeText, nativeTranslationText } from './content/source-text.mjs';
 
 (() => {
   if (globalThis.__clearlingStarted) return;
@@ -16,10 +17,13 @@ import { BODY_SELECTOR, CANDIDATE_SELECTOR, OWN, EXCLUDED, siteFor, planElement,
   let disconnected = false, syncing = null, port = null, requestSerial = 0;
   const requests = new Map(), viewport = new ViewportSchedule();
   const mode = () => !enabled() || originalOnly ? 'original' : settings?.displayMode || 'translated';
-  function display(item,...args){present(item,...args);if(item.translation)outputOwners.set(item.translation,item);}
+  function display(item,...args){
+    try{present(item,...args);if(item.translation)outputOwners.set(item.translation,item);}
+    catch(error){if(error.message!=='SOURCE_CHANGED')throw error;disposeView(item);item.renderedRevision=0;pending.add(item);enqueue(item.element);schedulePump();}
+  }
   function view(item, phase, content) {
     const node = createView(item, () => { item.showOriginal = true; display(item, mode()); }, () => { item.failures=0;item.retryAt=0;item.results=[];item.renderedRevision=0;pending.add(item);display(item,mode(),'pending');schedulePump(); });
-    outputOwners.set(node,item); display(item,mode(),phase,content);outputOwners.set(item.translation,item);
+    outputOwners.set(node,item); display(item,mode(),phase,content);if(item.translation)outputOwners.set(item.translation,item);
   }
   function disconnect() {
     port = null;
@@ -51,7 +55,7 @@ import { BODY_SELECTOR, CANDIDATE_SELECTOR, OWN, EXCLUDED, siteFor, planElement,
       try {port?.postMessage({type:'UPDATE_PRIORITY',requestId,priority:Number.isFinite(rank)?rank:30000,distant:!Number.isFinite(rank)});}catch{}
     }
   }
-  const diagnostics = { inspected: 0, scanMs: 0, rendered: 0, requests: 0, mutations: 0, lastError: null };
+  const diagnostics = { inspected: 0, scanMs: 0, rendered: 0, requests: 0, mutations: 0, nativeFragmentFallbacks: 0, lastError: null };
   const send = async payload => {
     try { return await chrome.runtime.sendMessage(payload); }
     catch { return { ok: false, code: 'DISCONNECTED' }; }
@@ -71,21 +75,24 @@ import { BODY_SELECTOR, CANDIDATE_SELECTOR, OWN, EXCLUDED, siteFor, planElement,
     diagnostics.inspected++;
     if (!plan) { if (previous) remove(previous); return; }
     if (previous?.identity === plan.identity) {
-      const placementChanged = previous.placement !== plan.placement || previous.replaceable !== plan.replaceable || previous.sourceElement !== plan.sourceElement;
+      const placementChanged = previous.placement !== plan.placement || previous.replaceable !== plan.replaceable || previous.sourceElement !== plan.sourceElement || previous.native !== plan.native
+        || plan.native && (!sameTextSlots(previous.textSlots,plan.textSlots) || previous.rawIdentity !== plan.rawIdentity);
       if (previous.translation && (placementChanged || !ownsPlacement(previous))) { disposeView(previous); previous.renderedRevision = 0; pending.add(previous); }
       previous.placement = plan.placement;
       previous.replaceable = plan.replaceable;
       previous.sourceElement = plan.sourceElement;
+      previous.native = plan.native; previous.textSlots = plan.textSlots; previous.sourceValues = plan.sourceValues; previous.rawIdentity = plan.rawIdentity; previous.protectedNodes = plan.protectedNodes;
       if (previous.translation) {
         const style=getComputedStyle(element);
-        for(const key of ['fontSize','lineHeight','fontFamily','fontWeight','letterSpacing','color','textAlign'])previous.translation.style[key]=style[key];
+        for(const key of ['fontSize','lineHeight','fontFamily','fontWeight','fontStyle','letterSpacing','color','textAlign','whiteSpace'])previous.translation.style[key]=style[key];
         display(previous,mode());
+        if(previous.native && previous.phase==='ready' && mode()==='bilingual'){previous.renderedRevision=0;pending.add(previous);schedulePump();}
       }
       return;
     }
     const item = previous || { element, id: `b${++serial}`, translation: null, flight: null };
     if(previous) { for(const [requestId,request] of requests)if(request.owners.delete(item) && !request.owners.size)try{port?.postMessage({type:'UNSUBSCRIBE',requestId});}catch{} item.flight=null; }
-    disposeView(item); item.phase=null;item.showOriginal=false;
+    disposeView(item); item.phase=null;item.showOriginal=false;item.unchanged=false;item.nativeValues=null;item.nativeSuppressedEdges=null;item.nativeRetryPlan=null;item.nativeChunkPlan=null;
     Object.assign(item, plan, { hash: sourceHash(plan.identity), renderedRevision: 0, failures: 0, retryAt: 0, chunks: splitSource(plan.text), results: [] });
     records.set(element, item); pending.add(item); intersection.observe(element);
     if(enabled() && mode()==='translated' && Number.isFinite(priority(item)) && !isInteracting(item))view(item,'pending');
@@ -132,23 +139,28 @@ import { BODY_SELECTOR, CANDIDATE_SELECTOR, OWN, EXCLUDED, siteFor, planElement,
     diagnostics.mutations += changes.length;
     let hadRemoval = false;
     for (const change of changes) {
+      if (change.type === 'characterData' && isProjectedMutation(change.target,change.oldValue)) continue;
       const element = change.target.nodeType === 1 ? change.target : change.target.parentElement;
       if (!element || element.closest(OWN)) continue;
       if (change.type === 'attributes' || change.type === 'characterData') { enqueue(element); continue; }
-      const nodes = [...change.addedNodes, ...change.removedNodes];
+      const added=[...change.addedNodes].filter(node=>!isProjectedChildMutation(node,change.target,'add'));
+      const removed=[...change.removedNodes].filter(node=>!isProjectedChildMutation(node,change.target,'remove'));
+      const nodes = [...added,...removed];
+      if(!nodes.length)continue;
       if (nodes.length && nodes.every(node => node.nodeType === 1 && node.matches(OWN))) {
-        for (const node of change.removedNodes) {
+        for (const node of removed) {
           const item = outputOwners.get(node);
           if (item && records.get(item.element) === item && item.element.isConnected && item.translation === node) {
+            if (item.native && !item.projectionAttached && !node.isConnected) continue;
             disposeView(item); item.renderedRevision = 0; pending.add(item); schedulePump();
           }
         }
         continue;
       }
-      if (change.removedNodes.length) hadRemoval = true;
+      if (removed.length) hadRemoval = true;
       const owner = element.closest(site === 'x' ? BODY_SELECTOR : CANDIDATE_SELECTOR);
       if (owner && (site === 'x' || records.has(owner))) enqueue(owner);
-      for (const node of change.addedNodes) {
+      for (const node of added) {
         if (node.nodeType === 1) enqueue(node);
         else if (node.nodeType === 3) enqueue(element);
       }
@@ -161,10 +173,10 @@ import { BODY_SELECTOR, CANDIDATE_SELECTOR, OWN, EXCLUDED, siteFor, planElement,
     observed.add(root);
     if(root instanceof ShadowRoot) {
       const style=document.createElement('style');style.dataset.clearling='style';
-      style.textContent='[data-cl-source]{display:none!important}[data-clearling="translation"]{display:block;white-space:pre-wrap;overflow-wrap:break-word;max-width:100%;box-sizing:border-box}[data-clearling="translation"][hidden]{display:none!important}td[data-clearling="translation"],th[data-clearling="translation"]{display:table-cell}li[data-clearling="translation"]{display:list-item}';
+      style.textContent='[data-cl-source]{display:none!important}[data-clearling="translation"]{display:block;white-space:inherit;overflow-wrap:break-word;max-width:100%;box-sizing:border-box}[data-clearling="translation"][hidden]{display:none!important}td[data-clearling="translation"],th[data-clearling="translation"]{display:table-cell}li[data-clearling="translation"]{display:list-item}';
       root.append(style);
     }
-    observer.observe(root, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['lang', 'translate', 'hidden', 'aria-hidden', 'data-testid', 'class', 'style', 'contenteditable', 'role', 'href', 'target', 'alt', 'data-block'] });
+    observer.observe(root, { childList: true, characterData: true, characterDataOldValue: true, subtree: true, attributes: true, attributeFilter: ['lang', 'translate', 'hidden', 'aria-hidden', 'data-testid', 'class', 'style', 'contenteditable', 'role', 'href', 'target', 'alt', 'data-block'] });
     enqueue(root);
   }
   const intersection = new IntersectionObserver(entries => {
@@ -185,19 +197,34 @@ import { BODY_SELECTOR, CANDIDATE_SELECTOR, OWN, EXCLUDED, siteFor, planElement,
     if (records.get(item.element) !== item || !item.element.isConnected) return;
     const plan=planElement(item.element,site);
     if(!plan || plan.identity!==item.identity){enqueue(item.element);return;}
-    if(item.placement!==plan.placement || item.replaceable!==plan.replaceable || item.sourceElement!==plan.sourceElement)disposeView(item);
-    item.placement=plan.placement;item.replaceable=plan.replaceable;item.sourceElement=plan.sourceElement;
+    if(item.placement!==plan.placement || item.replaceable!==plan.replaceable || item.sourceElement!==plan.sourceElement || item.native!==plan.native
+      || plan.native && (!sameTextSlots(item.textSlots,plan.textSlots) || item.rawIdentity!==plan.rawIdentity))disposeView(item);
+    item.placement=plan.placement;item.replaceable=plan.replaceable;item.sourceElement=plan.sourceElement;item.native=plan.native;
+    item.textSlots=plan.textSlots;item.sourceValues=plan.sourceValues;item.rawIdentity=plan.rawIdentity;item.protectedNodes=plan.protectedNodes;
     if(isInteracting(item)){schedulePump(200);return;}
-    const content=renderRichText(item,joinTranslations(item.chunks,item.results));
+    const joined=item.nativeChunkPlan?joinNativeFragments(item.nativeChunkPlan,item.results):joinTranslations(item.chunks,item.results);
+    const text=item.native?nativeTranslationText(joined):joined;
+    const content=renderRichText(item,text);
+    item.unchanged=sameTranslation(item.text,text,item.protectedValues);
+    if (item.native && !item.unchanged) prepareNativeText(item,text);
     const readingAnchor=[...records.values()].find(record=>{const rect=anchor(record).getBoundingClientRect();return rect.top>=0 && rect.top<innerHeight;});
     const before=readingAnchor?anchor(readingAnchor).getBoundingClientRect().top:0;
     view(item,'ready',content);
+    if(!item.translation)return;
     if(readingAnchor && performance.now()-viewport.lastScroll>160) {
       const shift=anchor(readingAnchor).getBoundingClientRect().top-before;
       if(Math.abs(shift)>1 && Math.abs(shift)<innerHeight)window.scrollBy(0,shift);
     }
     item.translation.dataset.model=modelId;item.translation.dataset.revision=String(revision);
+    if(item.native){item.element.dataset.clModel=modelId;item.element.dataset.clRevision=String(revision);}
     item.renderedRevision=revision;item.failures=0;pending.delete(item);diagnostics.rendered++;
+  }
+  function retryNativeFragments(item,code){
+    if(records.get(item.element)!==item||!item.element.isConnected)return false;
+    if(!item.native||item.nativeRetryPlan||settings.readingEngine!=='bing'||!['RESPONSE_INCOMPLETE','PROTECTED_TEXT_MISSING'].includes(code))return false;
+    const plan=nativeFragmentPlan(item);if(!plan)return false;
+    item.nativeRetryPlan=plan;item.results=[];item.failures=0;item.retryAt=0;item.renderedRevision=0;
+    pending.add(item);diagnostics.nativeFragmentFallbacks++;view(item,'pending');schedulePump();return true;
   }
   async function pump() {
     if (!enabled() || mode() === 'original' || disconnected || document.hidden) return;
@@ -225,12 +252,14 @@ import { BODY_SELECTOR, CANDIDATE_SELECTOR, OWN, EXCLUDED, siteFor, planElement,
     for (const [item, rank] of candidates) {
       if (batch.length >= 4 || size >= limit) break;
       if ((rank>=10000)!==(firstRank>=10000))break;
+      const fragmentPlan=settings.readingEngine==='bing'?item.nativeRetryPlan:null;
+      if(item.nativeChunkPlan!==fragmentPlan){item.nativeChunkPlan=fragmentPlan;item.chunks=fragmentPlan?fragmentPlan.chunks:splitSource(item.text);item.results=[];}
       if (item.chunks.every((_, i) => Boolean(item.results[i]))) { render(item, revision, modelId); continue; }
       for (let part = 0; part < item.chunks.length && batch.length < 4; part++) {
         if (item.results[part] != null) continue;
         if (batch.length && size + item.chunks[part].length > limit) break;
         const id = `${item.id}-p${part}`;
-        batch.push({ id, text: item.chunks[part], sourceHash: item.hash, context: site === 'x' ? 'Social media post or reply' : document.title.slice(0, 150) });
+        batch.push({ id, text: item.chunks[part], sourceHash: item.hash, context: item.nativeChunkPlan ? `Native text slot ${item.hash}: ${document.title.slice(0,150)}` : site === 'x' ? 'Social media post or reply' : document.title.slice(0, 150) });
         inFlight.push({ id, item, part, hash: item.hash, identity: item.identity }); owners.add(item); size += item.chunks[part].length;
       }
     }
@@ -244,7 +273,7 @@ import { BODY_SELECTOR, CANDIDATE_SELECTOR, OWN, EXCLUDED, siteFor, planElement,
       const job=inFlight.find(j=>j.id===value.id);
       if(!job || records.get(job.item.element)!==job.item || job.item.hash!==job.hash || job.item.identity!==job.identity || !job.item.element.isConnected)return;
       job.item.results[job.part]=value.text;
-      if(job.item.chunks.every((_,i)=>Boolean(job.item.results[i])))try {render(job.item,revision,modelId);}catch {job.item.failures++;job.item.results=[];job.item.retryAt=Date.now()+1500;view(job.item,'failed');}
+      if(job.item.chunks.every((_,i)=>Boolean(job.item.results[i])))try {render(job.item,revision,modelId);}catch(error) {diagnostics.lastError=['SOURCE_CHANGED','RESPONSE_INCOMPLETE','PROTECTED_TEXT_MISSING'].includes(error.message)?error.message:'RENDER_FAILED';diagnostics.nativeMapping=error.nativeMapping||null;if(!retryNativeFragments(job.item,error.message)){job.item.failures++;job.item.results=[];job.item.retryAt=Date.now()+1500;view(job.item,'failed');}}
     }, owners);
     busy--;
     for(const item of owners)if(item.flight===token)item.flight=null;
@@ -262,7 +291,7 @@ import { BODY_SELECTOR, CANDIDATE_SELECTOR, OWN, EXCLUDED, siteFor, planElement,
       if (response.code === 'CONFIG_CHANGED') { void sync(); return; }
       if(response.code==='CANCELLED'){schedulePump();return;}
       const retry = response.retryAfterMs || 1500;
-      for (const item of owners) { if(item.renderedRevision===revision)continue;item.failures++; if (['HTTP_401', 'HTTP_403', 'HTTP_400', 'HTTP_404'].includes(response.code)) item.failures = 3; item.retryAt = Date.now() + retry * Math.max(1, item.failures); if(item.element.isConnected && records.get(item.element)===item)view(item,'failed'); }
+      for (const item of owners) { if(item.renderedRevision===revision)continue;if(retryNativeFragments(item,response.code))continue;item.failures++; if (['HTTP_401', 'HTTP_403', 'HTTP_400', 'HTTP_404'].includes(response.code)) item.failures = 3; item.retryAt = Date.now() + retry * Math.max(1, item.failures); if(item.element.isConnected && records.get(item.element)===item)view(item,'failed'); }
       schedulePump(retry);
     }
     schedulePump();
@@ -272,7 +301,7 @@ import { BODY_SELECTOR, CANDIDATE_SELECTOR, OWN, EXCLUDED, siteFor, planElement,
     settings = next;
     if (changed) {
       generation++;
-      for (const item of records.values()) { item.results = []; item.failures = 0; item.retryAt = 0; item.renderedRevision = 0; item.phase=null;item.showOriginal=false;disposeView(item);pending.add(item); }
+      for (const item of records.values()) { item.results = []; item.failures = 0; item.retryAt = 0; item.renderedRevision = 0; item.phase=null;item.showOriginal=false;item.unchanged=false;item.nativeValues=null;item.nativeSuppressedEdges=null;disposeView(item);pending.add(item); }
     }
     for (const item of records.values()) if (item.translation) display(item,mode());
     schedulePump();

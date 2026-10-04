@@ -8,9 +8,9 @@
   background: transparent !important;
   font-family: inherit;
   font-weight: inherit;
-  font-style: normal !important;
-  letter-spacing: normal;
-  white-space: pre-wrap !important;
+  font-style: inherit;
+  letter-spacing: inherit;
+  white-space: inherit;
   overflow-wrap: break-word !important;
   word-break: normal !important;
   text-align: start;

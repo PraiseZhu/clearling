@@ -1,0 +1,38 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Public layout compatibility fixture</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font:16px/1.5 system-ui;color:#dce3ea;background:#111820}main{max-width:760px;margin:auto;padding:24px}.timeline{border-left:1px solid #566270;padding-left:24px}.event{margin:20px 0;border:1px solid #566270;padding:16px}.metadata{display:flex;flex-direction:column;font-size:12px;line-height:18px;margin-bottom:12px}.metadata a{color:#5cb9ff}.report-heading{font-size:22px;line-height:30px;border-bottom:1px solid #566270;padding-bottom:8px;margin:12px 0}.report-heading strong{font-style:italic;letter-spacing:.2px}.anchor{position:absolute}.anchor svg{width:12px;height:12px}p{margin:10px 0}a{color:#65caff}.accent{font-style:italic;color:#f2b761;letter-spacing:1px}code{background:#293b4d;border-radius:3px;font:14px monospace;padding:2px 4px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.grid p{grid-column:2;background:#223242;padding:10px}.flex{display:flex;gap:12px}.flex p{flex:0 0 65%;order:2}.decoration{border:2px solid #7e90a1;padding:12px;background:#253847}table{width:100%;table-layout:fixed;border-collapse:collapse}td,th{border:1px solid #687d91;padding:8px}button,input{font:inherit;max-width:100%}.preserved-lines{white-space:pre-wrap}.steps{counter-reset:step 6;list-style:none;padding-left:32px}.steps>li{position:relative;counter-increment:step}.steps>li:before{content:counter(step) ".";position:absolute;left:-26px}nav{display:flex;gap:12px}.hidden{display:none!important}
+</style></head><body><main>
+<nav><a href="#timeline">Overview</a><button id="nav-button">Open settings</button></nav>
+<section class="timeline" id="timeline"><article class="event">
+<div class="metadata" id="metadata">
+ <a href="#timeline">build-checks</a>
+ <span>Automation</span>
+ reviewed this proposed update
+ <relative-time datetime="2026-01-01T00:00:00Z">twenty minutes ago</relative-time>
+</div>
+<div id="layout-container"><div class="markdown-body">
+<h2 class="report-heading" id="mixed-title">自动 Build 状态： JOB_PENDING</h2>
+<h2 class="report-heading" id="english-heading"><a class="anchor" aria-hidden="true" href="#english-heading"><svg viewBox="0 0 10 10"><path d="M1 5h8"/></svg></a><strong>Release checks are complete.</strong></h2>
+<p id="whitespace">
+  The generated page should collapse ordinary source indentation.
+  Additional source lines should remain part of the same paragraph.
+</p>
+<p id="rich">Read <span class="accent">this important <strong>release note</strong></span> and <a id="native-link" href="#timeline">open the details</a>. Keep <code>cacheKey</code> intact.</p>
+<p id="unchanged">[UNCHANGED] Clearling Native Reader</p>
+<p id="edge-punctuation"><strong>[EDGE_PUNCTUATION] A strongly formatted sentence.</strong></p>
+<p id="control">This prose stays readable around <button id="native-button">Increment</button> a native control.</p>
+<p id="private">This public instruction stays separate from <input id="private-input" value="private form sample must not be transmitted" aria-label="Private sample">.</p>
+<p id="hidden-text">A visible explanation stays readable.<span style="display:none">private hidden sample must not be transmitted</span><span aria-hidden="true">Hidden icon label</span></p>
+<p class="preserved-lines" id="prewrap">An intentional first line.
+An intentional second line.</p>
+<p id="breaks">A first logical line.<br>A second logical line.</p>
+<ol class="steps" start="7"><li id="ordered" value="7">A numbered step keeps its original marker.<ul><li id="nested">A nested step remains independent.</li></ul></li></ol>
+<table><tr><th id="table-header">Release item</th><th>123</th></tr><tr><td id="table-cell">A table description should preserve its native cell.</td><td>456</td></tr></table>
+<section class="grid"><p id="grid">A grid paragraph retains its assigned column.</p></section>
+<section class="flex"><p id="flex">A flexible paragraph retains its sizing rules.</p><span>123</span></section>
+<p class="decoration" id="decorated">A decorated paragraph preserves its border and background.</p>
+<p id="dynamic">A website may update this paragraph after translation.</p>
+<p id="delayed">[SLOW] Waiting for a provider must not add another visible row.</p>
+<p id="failure" hidden>[FAIL] A failed paragraph stays readable without a layout placeholder.</p>
+</div></div></article></section>
+</main><script>window.nativeClicks=0;window.linkClicks=0;document.querySelector('#native-button').onclick=()=>window.nativeClicks++;document.querySelector('#native-link').onclick=e=>{e.preventDefault();window.linkClicks++};</script></body></html>

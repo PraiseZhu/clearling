@@ -27,7 +27,8 @@ const server = http.createServer(async (req, res) => {
       if(rateLimitFixture && input.model==='openai/gpt-5.6-luna'){res.setHeader('Retry-After','1');res.writeHead(429);res.end('{}');return;}
       inputs.push(...data.blocks.map(block => block.text));
       if(data.blocks.some(b=>b.text.includes('[FAIL]'))){res.writeHead(400);res.end('{}');return;}
-      const translations = data.blocks.map(b => ({ id: b.id, text: textMap.get(b.text) || (process.env.CLEARLING_FIXTURE_CHINESE === '1' ? b.text.split(/(⟦CLR\d+_\d+⟧)/g).map(s=>/^⟦CLR/.test(s)?s:s.trim()?'示例中文译文，保持原有含义与阅读顺序。':'').join('') : `【测试译文】${b.text}`) }));
+      const translations = data.blocks.map(b => ({ id: b.id, text: b.text.includes('[UNCHANGED]') ? b.text : textMap.get(b.text) || (process.env.CLEARLING_FIXTURE_CHINESE === '1' ? b.text.split(/(⟦CLR\d+_\d+⟧)/g).map(s=>/^⟦CLR/.test(s)?s:s.trim()?'示例中文译文，保持原有含义与阅读顺序。':s).join('') : `【测试译文】${b.text}`) }));
+      data.blocks.forEach((block,i)=>{if(block.text.includes('[EDGE_PUNCTUATION]')){const tokens=block.text.match(/⟦CLR\d+_\d+⟧/g)||[];if(tokens.length===2)translations[i].text=tokens[0]+'加粗译文'+tokens[1]+'。';}});
       const result = { clearling_test_provider: true, model: input.model, choices: [{ message: { content: JSON.stringify({ translations }) } }] };
       await new Promise(resolve => setTimeout(resolve, data.blocks.some(b => b.text.includes('[SLOW]')) ? 500 : 35)); res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(result));
     } catch { res.writeHead(400); res.end('{"error":"invalid fixture request"}'); }
@@ -42,6 +43,7 @@ const server = http.createServer(async (req, res) => {
   if (req.url === '/' || req.url === '/article' || req.url.startsWith('/article?')) file = path.join(root, 'fixtures/article.html');
   else if (req.url === '/frame') {res.setHeader('Content-Type','text/html; charset=utf-8');res.end('<html lang=\"en\"><body><p id=\"frame-text\">The update preserves existing settings. If validation fails, the previous configuration remains active and no changes are applied.</p></body></html>');return;}
   else if (req.url === '/x-thread') file = path.join(root, 'fixtures/x-thread.html');
+  else if (req.url === '/compatibility') file = path.join(root, 'fixtures/compatibility.html');
   else if (/^\/icons\/(16|32|48|128)\.png$/.test(req.url)) file = path.join(root, 'dist', req.url.slice(1));
   if (!file) { res.writeHead(404); res.end(); return; }
   try { const data = await readFile(file); res.setHeader('Content-Type', file.endsWith('.png') ? 'image/png' : 'text/html; charset=utf-8'); res.end(data); }
