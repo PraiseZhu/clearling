@@ -58,7 +58,7 @@ Model availability and thinking behavior must be verified with the actual
 gateway. GLM 5.3 Flash cannot disable native thinking. Qwen's native protocol
 uses enable_thinking, while Cindy's documented adapter uses thinking.type.
 
-Version 0.5.2 is supplied as a ZIP package. To update an existing unpacked
+Version 0.5.3 is supplied as a ZIP package. To update an existing unpacked
 installation while retaining its settings, replace files in the existing loaded
 directory and reload the extension; refresh existing webpages afterward. Avoid
 running two Clearling copies on the same page.
@@ -78,7 +78,7 @@ Real installation requires Chrome/Ego to load the MV3 manifest, run its worker
 and automatically inject its isolated content script. Merely injecting a
 JavaScript file is not installation evidence.
 
-The source has 56 Node tests. Browser checks run through
+The source has 58 Node tests. Browser checks run through
 `scripts/verify-reading.mjs`, `scripts/verify-ui.mjs`,
 `scripts/verify-presentation.mjs` and `scripts/verify-layout.mjs`, with JSON
 reports and UI screenshots in the ignored `artifacts/` directory.
@@ -117,6 +117,18 @@ introduced. Website edits or removal of that node are respected.
 If Microsoft loses markers in densely formatted prose, the same fast provider
 retries its readable text slots and reassembles the original formatting locally.
 Protected code and controls stay local; this does not switch to the paid AI path.
+
+Version 0.5.3 extends native text replacement to X Article card titles/summaries
+and Article titles. Translation-only shows one title; bilingual mode alone adds
+a second block, and original mode restores the same text nodes. Nested card
+wrappers share one owner. Semantic headings include short foreign headings and
+inline/flex/grid headings inside article headers. Directory links translate only
+when they refer to a heading on the same page, including encoded anchor IDs;
+menus, unrelated navigation, editors and protected generic-page text remain
+excluded. Native anchors, controls and website edits retain their ownership.
+`scripts/verify-headings.mjs` covers these cases in isolated Chrome/Ego profiles;
+`scripts/verify-public-headings.mjs` checks the reported Zenn page using real
+Microsoft translation and writes only structural metadata.
 
 Layout containers and common author/time metadata are excluded from generic
 paragraph detection. Chinese technical labels and unchanged translations do not

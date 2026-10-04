@@ -24,9 +24,12 @@ try {
  checks.push('default translation-only hides source without mutating its original children');
  for(const selector of ['#reply-text','#short','#inline','#card-title','#card-summary','#article-title','#article-paragraph','#article-list','#draft-ordered','#draft-next','#draft-unordered','#article-quote','#article-embedded','#recycled-text']) {
    await scroll(selector);await cdp.wait(page,ready(selector));
-   assert.equal(await cdp.evaluate(page,`(()=>{const e=document.querySelector(${JSON.stringify(selector)});return e.querySelector(':scope > [data-clearling=translation]') ? getComputedStyle(e).display!=='none' : getComputedStyle(e).display==='none'})()`),true,selector);
+   if(['#card-title','#card-summary','#article-title'].includes(selector)) {
+     assert.equal(await cdp.evaluate(page,`(()=>{const e=document.querySelector(${JSON.stringify(selector)});return e.hasAttribute('data-cl-native')&&e.dataset.clMode==='translated'&&getComputedStyle(e).display!=='none'&&/[\\u3400-\\u9fff]/.test(e.textContent)&&!e.querySelector('[data-clearling=translation]')})()`),true,selector);
+   } else assert.equal(await cdp.evaluate(page,`(()=>{const e=document.querySelector(${JSON.stringify(selector)});return e.querySelector(':scope > [data-clearling=translation]') ? getComputedStyle(e).display!=='none' : getComputedStyle(e).display==='none'})()`),true,selector);
  }
- assert.equal(await cdp.evaluate(page,'document.querySelectorAll("#article-card [data-clearling][data-phase=ready]").length'),2);
+ assert.equal(await cdp.evaluate(page,'document.querySelectorAll("#article-card [data-clearling][data-phase=ready]").length'),0);
+ assert.equal(await cdp.evaluate(page,'document.querySelectorAll("#article-card [data-cl-native][data-cl-phase=ready]").length'),2);
  checks.push('quote cards, article titles, paragraphs, list items and embedded quotes translate once');
  await scroll('#inline');
  const links=await cdp.evaluate(page,'(()=>{const s=document.querySelector("#source-link"),t=document.querySelector("#inline").nextElementSibling;return {original:s.href,translated:t.querySelector("a").href,code:t.querySelector("code").textContent}})()');

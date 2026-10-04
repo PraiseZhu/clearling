@@ -1,7 +1,7 @@
 import { anchor, ownsView, disposeView, createView, renderRichText, present, isInteracting } from './content/presentation.mjs';
 import { ViewportSchedule } from './content/scheduler.mjs';
 import { translationReady } from './shared/core.mjs';
-import { BODY_SELECTOR, CANDIDATE_SELECTOR, OWN, EXCLUDED, siteFor, planElement, sourceHash, splitSource, joinTranslations, sameTranslation, nativeFragmentPlan, joinNativeFragments } from './content/planner.mjs';
+import { BODY_SELECTOR, CANDIDATE_SELECTOR, HEADING_SELECTOR, OWN, EXCLUDED, siteFor, planElement, articleTocLabel, sourceHash, splitSource, joinTranslations, sameTranslation, nativeFragmentPlan, joinNativeFragments } from './content/planner.mjs';
 import { isProjectedMutation, isProjectedChildMutation, sameTextSlots, prepareNativeText, nativeTranslationText } from './content/source-text.mjs';
 
 (() => {
@@ -13,6 +13,7 @@ import { isProjectedMutation, isProjectedChildMutation, sameTextSlots, prepareNa
   const outputOwners = new WeakMap();
   let site = 'generic', settings = null, serial = 0, generation = 1, busy = 0;
   let scanScheduled = false, pumpTimer = null, reconnectTimer = null, reconnectAttempt = 0;
+  let refreshToc = false;
   let lastUrl = location.href, originalOnly = false;
   let disconnected = false, syncing = null, port = null, requestSerial = 0;
   const requests = new Map(), viewport = new ViewportSchedule();
@@ -104,15 +105,35 @@ import { isProjectedMutation, isProjectedChildMutation, sameTextSlots, prepareNa
     dirty.add(root);
     if (!scanScheduled) { scanScheduled = true; setTimeout(scan, 0); }
   }
+  function rescanToc() {
+    refreshToc = false;
+    for (const link of document.querySelectorAll('a[href*="#"]')) {
+      enqueue(link);
+      for (let node = link; node && node !== document.body; node = node.parentElement) {
+        if (articleTocLabel(node.previousElementSibling)) enqueue(node.previousElementSibling);
+      }
+    }
+  }
+  function ownerFor(element) {
+    const selector = site === 'x' ? BODY_SELECTOR : CANDIDATE_SELECTOR;
+    const nearest = element.closest(selector);
+    // A newly scanned anchor or title wrapper is not necessarily a record.
+    // Website edits still belong to the paragraph/heading owning its text.
+    for (let owner = nearest; owner; owner = owner.parentElement?.closest(selector)) {
+      if (records.has(owner)) return owner;
+    }
+    return nearest;
+  }
   function scan() {
     scanScheduled = false;
     if (site !== 'x') site = siteFor(document);
     const started = performance.now();
     for (const root of dirty) {
       if (root.nodeType === 1 && !root.isConnected) continue;
+      if (site !== 'x' && (root.matches?.(HEADING_SELECTOR) || root.querySelector?.(HEADING_SELECTOR))) refreshToc = true;
       if(root.shadowRoot)observe(root.shadowRoot);
       else if(root.nodeType===1 && root.localName.includes('-') && shadowCandidates.size<200)shadowCandidates.add(root);
-      const owner = root.nodeType === 1 ? root.closest(site === 'x' ? BODY_SELECTOR : CANDIDATE_SELECTOR) : null;
+      const owner = root.nodeType === 1 ? ownerFor(root) : null;
       if (owner) mark(owner);
       if (site === 'x') {
         if(root.querySelectorAll)jobs.push(root.querySelectorAll(BODY_SELECTOR)[Symbol.iterator]());
@@ -132,7 +153,12 @@ import { isProjectedMutation, isProjectedChildMutation, sameTextSlots, prepareNa
       else if(element.localName.includes('-') && shadowCandidates.size<200)shadowCandidates.add(element);
     }
     diagnostics.scanMs += performance.now() - started;
-    if (jobs.length || dirty.size) { scanScheduled = true; setTimeout(scan, 16); }
+    if (!jobs.length && refreshToc) {
+      // Headings can arrive after their directory or change their anchor IDs.
+      // Replan links without rescanning the rest of the article.
+      rescanToc();
+    }
+    if ((jobs.length || dirty.size) && !scanScheduled) { scanScheduled = true; setTimeout(scan, 16); }
     schedulePump();
   }
   const observer = new MutationObserver(changes => {
@@ -142,11 +168,12 @@ import { isProjectedMutation, isProjectedChildMutation, sameTextSlots, prepareNa
       if (change.type === 'characterData' && isProjectedMutation(change.target,change.oldValue)) continue;
       const element = change.target.nodeType === 1 ? change.target : change.target.parentElement;
       if (!element || element.closest(OWN)) continue;
-      if (change.type === 'attributes' || change.type === 'characterData') { enqueue(element); continue; }
+      if (change.type === 'attributes' || change.type === 'characterData') { if (change.attributeName === 'id') refreshToc = true; enqueue(element); continue; }
       const added=[...change.addedNodes].filter(node=>!isProjectedChildMutation(node,change.target,'add'));
       const removed=[...change.removedNodes].filter(node=>!isProjectedChildMutation(node,change.target,'remove'));
       const nodes = [...added,...removed];
       if(!nodes.length)continue;
+      if (site !== 'x' && nodes.some(node => node.nodeType === 1 && (node.matches(HEADING_SELECTOR) || node.querySelector(HEADING_SELECTOR)))) refreshToc = true;
       if (nodes.length && nodes.every(node => node.nodeType === 1 && node.matches(OWN))) {
         for (const node of removed) {
           const item = outputOwners.get(node);
@@ -158,7 +185,7 @@ import { isProjectedMutation, isProjectedChildMutation, sameTextSlots, prepareNa
         continue;
       }
       if (removed.length) hadRemoval = true;
-      const owner = element.closest(site === 'x' ? BODY_SELECTOR : CANDIDATE_SELECTOR);
+      const owner = ownerFor(element);
       if (owner && (site === 'x' || records.has(owner))) enqueue(owner);
       for (const node of added) {
         if (node.nodeType === 1) enqueue(node);
@@ -166,6 +193,7 @@ import { isProjectedMutation, isProjectedChildMutation, sameTextSlots, prepareNa
       }
     }
     if (hadRemoval) for (const item of records.values()) if (!item.element.isConnected) remove(item);
+    if (refreshToc && !scanScheduled && !jobs.length) rescanToc();
     if (location.href !== lastUrl) navigation();
   });
   function observe(root) {
@@ -176,7 +204,7 @@ import { isProjectedMutation, isProjectedChildMutation, sameTextSlots, prepareNa
       style.textContent='[data-cl-source]{display:none!important}[data-clearling="translation"]{display:block;white-space:inherit;overflow-wrap:break-word;max-width:100%;box-sizing:border-box}[data-clearling="translation"][hidden]{display:none!important}td[data-clearling="translation"],th[data-clearling="translation"]{display:table-cell}li[data-clearling="translation"]{display:list-item}';
       root.append(style);
     }
-    observer.observe(root, { childList: true, characterData: true, characterDataOldValue: true, subtree: true, attributes: true, attributeFilter: ['lang', 'translate', 'hidden', 'aria-hidden', 'data-testid', 'class', 'style', 'contenteditable', 'role', 'href', 'target', 'alt', 'data-block'] });
+    observer.observe(root, { childList: true, characterData: true, characterDataOldValue: true, subtree: true, attributes: true, attributeFilter: ['id', 'lang', 'translate', 'hidden', 'aria-hidden', 'data-testid', 'class', 'style', 'contenteditable', 'role', 'href', 'target', 'alt', 'data-block'] });
     enqueue(root);
   }
   const intersection = new IntersectionObserver(entries => {

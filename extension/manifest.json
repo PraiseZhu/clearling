@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "清译 · Clearling",
   "short_name": "清译",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "自动中文翻译，支持仅译文、双语阅读与模型切换。",
   "permissions": [
     "storage",
